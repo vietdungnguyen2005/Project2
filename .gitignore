@@ -1,0 +1,13 @@
+.next/
+.open-next/
+.wrangler/
+node_modules/
+out/
+dist/
+coverage/
+qa-artifacts/
+next-dev.log
+cloudflare-env.d.ts
+*.log
+.env*
+!.env.example

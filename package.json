@@ -1,0 +1,45 @@
+{
+  "name": "v-market",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:e2e": "python tools/qa_playwright.py"
+  },
+  "dependencies": {
+    "@opennextjs/cloudflare": "1.20.2",
+    "@tanstack/react-query": "5.101.4",
+    "lucide-react": "0.468.0",
+    "next": "16.2.11",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@tailwindcss/postcss": "4.3.3",
+    "@testing-library/react": "16.1.0",
+    "@types/node": "24.13.3",
+    "@types/react": "19.0.2",
+    "@types/react-dom": "19.0.2",
+    "eslint": "10.8.0",
+    "globals": "17.7.0",
+    "tailwindcss": "4.3.3",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.65.0",
+    "vitest": "4.1.10",
+    "wrangler": "4.114.0"
+  },
+  "overrides": {
+    "@node-minify/core": "8.0.5",
+    "@node-minify/terser": "8.0.5",
+    "postcss": "8.5.22",
+    "sharp": "0.35.3"
+  }
+}

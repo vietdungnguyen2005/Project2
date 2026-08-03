@@ -1,0 +1,11 @@
+/_next/static/*
+  Cache-Control: public,max-age=31536000,immutable
+
+/assets/*
+  Cache-Control: public,max-age=31536000,immutable
+
+/products/*
+  Cache-Control: public,max-age=31536000,immutable
+
+/social/*
+  Cache-Control: public,max-age=31536000,immutable

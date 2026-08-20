@@ -30,7 +30,7 @@ jobs:
         run: npm audit --audit-level=high
 
       - name: Setup Python for browser QA
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 

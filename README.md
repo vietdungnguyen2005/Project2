@@ -4,6 +4,14 @@ V-Market is a portfolio-grade commerce system built around a problem common in J
 
 The public storefront is deployable to Cloudflare Workers. A Java 21/Spring Boot API owns the catalog, transactional checkout, inventory, fulfillment, legacy imports, and reconciliation. PostgreSQL is the source of truth; Redis is a fail-open catalog cache.
 
+## Live demo
+
+- Application: [v-market.vmarket-vietdung2005.workers.dev](https://v-market.vmarket-vietdung2005.workers.dev)
+- Backend readiness: [v-market-api.onrender.com/actuator/health/readiness](https://v-market-api.onrender.com/actuator/health/readiness)
+- Public deployment proof: [docs/evidence/live-deployment.md](docs/evidence/live-deployment.md)
+
+The backend uses Render's free web-service tier, so the first request after 15 minutes without inbound traffic can take about a minute while the container wakes up.
+
 ## Demonstrated capabilities
 
 - Durable guest checkout with server-owned JPY pricing, privacy acknowledgement, idempotency keys, deterministic lock order, and oversell protection.
@@ -59,4 +67,4 @@ Backend integration tests launch PostgreSQL 17 and Redis 8 with Testcontainers. 
 
 Copy only variable names from `.env.example`; never commit real values. Production startup rejects the documented local secrets. `BFF_SHARED_SECRET` and `VMARKET_OPS_SECRET` must be different random values of at least 32 characters in production.
 
-The existing Cloudflare URL may continue serving an earlier frontend deployment until this revision is deliberately deployed and `BACKEND_ORIGIN` is configured. The repository does not claim a live backend where none has been provisioned.
+The current Cloudflare deployment points to the live Render backend through a server-only `BACKEND_ORIGIN`; provider secret stores hold the BFF and operations credentials.

@@ -79,3 +79,10 @@ jobs:
         run: docker compose config --quiet
       - name: Lint Helm chart
         run: helm lint infra/helm/v-market && helm template portfolio infra/helm/v-market > /dev/null
+      - uses: hashicorp/setup-terraform@v3
+      - name: Check and validate AWS infrastructure
+        working-directory: infra/terraform/aws
+        run: |
+          terraform fmt -check
+          terraform init -backend=false
+          terraform validate

@@ -9,6 +9,7 @@ The public storefront is deployable to Cloudflare Workers. A Java 21/Spring Boot
 - Application: [v-market.vmarket-vietdung2005.workers.dev](https://v-market.vmarket-vietdung2005.workers.dev)
 - Backend readiness: [v-market-api.onrender.com/actuator/health/readiness](https://v-market-api.onrender.com/actuator/health/readiness)
 - Public deployment proof: [docs/evidence/live-deployment.md](docs/evidence/live-deployment.md)
+- Short-lived AWS deployment proof: [docs/evidence/aws-deployment.md](docs/evidence/aws-deployment.md)
 
 The backend uses Render's free web-service tier, so the first request after 15 minutes without inbound traffic can take about a minute while the container wakes up.
 
@@ -35,7 +36,7 @@ flowchart LR
   API --> M[Prometheus / OTLP]
 ```
 
-Cloudflare is a long-lived free frontend host. The backend remains portable: run it with Compose now, then deploy the same image to a free container host or Kubernetes without changing browser contracts. No AWS resource is required for the current demo.
+Cloudflare is the long-lived free frontend host. The same backend image has been verified on ECS with managed RDS and Redis without changing browser contracts. AWS is reproducible, short-lived evidence and is not a permanent dependency of the public demo.
 
 ## Run locally
 

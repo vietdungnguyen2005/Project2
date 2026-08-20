@@ -11,5 +11,10 @@ next-dev.log
 cloudflare-env.d.ts
 *.tsbuildinfo
 *.log
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
 .env*
 !.env.example

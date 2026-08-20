@@ -1,0 +1,4 @@
+expires_at = "replace-with-teardown-deadline"
+image_tag  = "replace-with-full-git-sha"
+
+# Supply TF_VAR_bff_shared_secret and TF_VAR_ops_secret through the environment.

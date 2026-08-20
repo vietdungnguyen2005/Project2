@@ -1,5 +1,13 @@
 # Evidence matrix
 
+## Deployment evidence
+
+- [Persistent free-tier deployment](evidence/live-deployment.md)
+- [Short-lived AWS deployment and legacy-import proof](evidence/aws-deployment.md)
+- [Machine-readable AWS verification](evidence/aws-verification.json)
+
+## Capability evidence
+
 | Recruiter-facing claim | Implementation | Automated proof |
 | --- | --- | --- |
 | Checkout cannot oversell | PostgreSQL row locks acquired in sorted SKU order inside one Spring transaction | `concurrentCheckoutCannotOversellInventory` asserts responses `201/409` and final stock `7` |

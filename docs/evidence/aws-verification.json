@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-08-20T16:04:38Z",
+  "region": "us-east-1",
+  "gitSha": "0c56022ec14237f5c1ef80a5cf620fa4116696bf",
+  "terraform": { "created": 43, "changed": 0, "destroyed": 0 },
+  "teardown": { "plannedDestroy": 43, "destroyed": 43, "terraformStateResourcesAfterDestroy": 0 },
+  "runtime": {
+    "readinessHttpStatus": 200,
+    "unauthenticatedOpsHttpStatus": 401,
+    "ecsDesired": 1,
+    "ecsRunning": 1,
+    "ecsPending": 0,
+    "rdsEncrypted": true,
+    "rdsPublic": false,
+    "redisTransitEncryption": true,
+    "redisAtRestEncryption": true
+  },
+  "painPoint": {
+    "name": "legacy-import-quarantine",
+    "jobId": "7baa739f-06fe-4df7-b770-6a4255ffa3dc",
+    "status": "COMPLETED_WITH_ERRORS",
+    "totalRows": 2,
+    "appliedRows": 1,
+    "rejectedRows": 1
+  }
+}

@@ -1,0 +1,48 @@
+spring:
+  application:
+    name: v-market-backend
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/vmarket}
+    username: ${SPRING_DATASOURCE_USERNAME:vmarket}
+    password: ${SPRING_DATASOURCE_PASSWORD:vmarket}
+  data:
+    redis:
+      url: ${SPRING_DATA_REDIS_URL:redis://localhost:6380}
+  batch:
+    job:
+      enabled: false
+    jdbc:
+      initialize-schema: always
+  flyway:
+    validate-migration-naming: true
+  threads:
+    virtual:
+      enabled: true
+
+server:
+  port: ${PORT:8080}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  tracing:
+    sampling:
+      probability: ${MANAGEMENT_TRACING_SAMPLING_PROBABILITY:0.1}
+
+springdoc:
+  api-docs:
+    enabled: ${SPRINGDOC_ENABLED:false}
+
+vmarket:
+  deployment-environment: ${DEPLOYMENT_ENVIRONMENT:local}
+  bff-secret: ${BFF_SHARED_SECRET:local-bff-secret}
+  ops-secret: ${VMARKET_OPS_SECRET:local-development-only}
+  swagger-ui:
+    enabled: ${SPRINGDOC_ENABLED:false}

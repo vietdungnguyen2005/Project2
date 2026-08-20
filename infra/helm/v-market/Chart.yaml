@@ -1,0 +1,6 @@
+apiVersion: v2
+name: v-market
+description: Spring Boot backend for the V-Market modernization portfolio system
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

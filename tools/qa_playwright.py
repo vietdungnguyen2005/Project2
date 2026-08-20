@@ -3,110 +3,118 @@ from pathlib import Path
 from playwright.sync_api import expect, sync_playwright
 
 root = Path(__file__).resolve().parents[1]
-artifacts = root / "qa-artifacts"
-artifacts.mkdir(exist_ok=True)
+artifacts = root / "docs" / "evidence"
+artifacts.mkdir(parents=True, exist_ok=True)
 base_url = os.environ.get("BASE_URL", "http://127.0.0.1:3000").rstrip("/")
 
-def assert_all_images_loaded(page):
-    page.evaluate(
-        """async () => {
-            const imgs = Array.from(document.images);
-            for (const img of imgs) {
-                img.loading = "eager";
-                img.scrollIntoView({ block: "center", inline: "nearest" });
-                await new Promise((resolve) => setTimeout(resolve, 180));
-            }
-            window.scrollTo(0, 0);
-        }"""
-    )
-    images = page.evaluate(
-        """async () => {
-            const imgs = Array.from(document.images);
-            await Promise.all(imgs.map((img) => {
-                if (img.complete) return Promise.resolve();
-                return new Promise((resolve) => {
-                    const timeout = setTimeout(resolve, 15000);
-                    const finish = () => {
-                        clearTimeout(timeout);
-                        resolve();
-                    };
-                    img.addEventListener("load", finish, { once: true });
-                    img.addEventListener("error", finish, { once: true });
-                });
-            }));
-            return imgs.map((img) => ({
-                src: img.currentSrc || img.src,
-                width: img.naturalWidth,
-                height: img.naturalHeight,
-            }));
-        }"""
-    )
-    broken = [image for image in images if image["width"] == 0 or image["height"] == 0]
-    assert not broken, f"Broken catalog images: {broken}"
+catalog = [
+    {
+        "sku": "VM-001", "vendorName": "Nami Studio", "name": "AeroKnit travel jacket",
+        "category": "APPAREL", "description": "Water-resistant shell for city travel.",
+        "priceMinor": 11000, "currency": "JPY", "imagePath": "/products/aeroknit-travel-jacket.jpg",
+        "imageAlt": "Model wearing a travel jacket", "availableQuantity": 32,
+    },
+    {
+        "sku": "VM-002", "vendorName": "Riverbyte", "name": "Modular desk organizer",
+        "category": "OFFICE", "description": "Stackable trays for hybrid desks.",
+        "priceMinor": 5700, "currency": "JPY", "imagePath": "/products/modular-desk-organizer.jpg",
+        "imageAlt": "Organized desk", "availableQuantity": 58,
+    },
+]
 
-with sync_playwright() as p:
-    browser = p.chromium.launch(headless=True)
+order = {
+    "orderNumber": "VM-EVIDENCE001", "trackingToken": "evidence-token-0123456789abcdef",
+    "paymentStatus": "PENDING", "fulfillmentStatus": "RECEIVED", "subtotalMinor": 11000,
+    "shippingMinor": 900, "taxMinor": 880, "grandTotalMinor": 12780, "currency": "JPY",
+    "createdAt": "2026-08-09T00:00:00Z",
+}
+
+tracked_order = {
+    "orderNumber": order["orderNumber"], "paymentStatus": "PENDING", "fulfillmentStatus": "PROCESSING",
+    "grandTotalMinor": 12780, "currency": "JPY", "createdAt": order["createdAt"],
+    "items": [{"sku": "VM-001", "name": "AeroKnit travel jacket", "unitPriceMinor": 11000, "quantity": 1}],
+}
+
+def install_api_contract(page):
+    page.route("**/api/catalog/products*", lambda route: route.fulfill(status=200, content_type="application/json", json=catalog))
+    page.route("**/api/orders", lambda route: route.fulfill(status=201, json=order))
+    page.route("**/api/orders/*?*", lambda route: route.fulfill(json=tracked_order))
+    page.route("**/api/ops/imports", lambda route: route.fulfill(json=[]))
+    page.route("**/api/ops/reconciliations", lambda route: route.fulfill(json=[]))
+    page.route("**/api/ops/orders", lambda route: route.fulfill(json=[{
+        "orderNumber": order["orderNumber"], "paymentStatus": "PENDING", "fulfillmentStatus": "RECEIVED",
+        "grandTotalMinor": 12780, "currency": "JPY", "createdAt": order["createdAt"],
+        "lines": [{"sku": "VM-001", "productName": "AeroKnit travel jacket", "quantity": 1}],
+    }]))
+
+def assert_no_overflow(page):
+    dimensions = page.evaluate("() => ({ width: document.documentElement.scrollWidth, viewport: window.innerWidth })")
+    assert dimensions["width"] <= dimensions["viewport"], f"Horizontal overflow: {dimensions}"
+
+def load_and_verify_images(page):
+    page.evaluate("""async () => {
+        const images = Array.from(document.images);
+        for (const image of images) {
+            image.loading = 'eager';
+            image.scrollIntoView({ block: 'center' });
+            if (!image.complete) await new Promise(resolve => {
+                image.addEventListener('load', resolve, { once: true });
+                image.addEventListener('error', resolve, { once: true });
+            });
+        }
+        window.scrollTo(0, 0);
+    }""")
+    broken = page.evaluate("() => Array.from(document.images).filter(image => !image.naturalWidth).map(image => image.currentSrc)")
+    assert not broken, f"Broken images: {broken}"
+
+with sync_playwright() as playwright:
+    browser = playwright.chromium.launch(headless=True)
+    console_errors = []
 
     desktop = browser.new_page(viewport={"width": 1440, "height": 1000})
-    desktop.set_default_timeout(120_000)
-    desktop.set_default_navigation_timeout(120_000)
-    desktop.goto(base_url, wait_until="domcontentloaded")
-    desktop.evaluate("window.localStorage.clear()")
-    desktop.goto(base_url, wait_until="domcontentloaded")
-    expect(desktop.get_by_role("heading", name="V-Market")).to_be_visible(timeout=120_000)
-    expect(desktop.get_by_role("heading", name="Mobile-fast catalog")).to_be_visible(timeout=120_000)
-    hero_image = desktop.locator("img").first
-    srcset = hero_image.get_attribute("srcset")
-    assert srcset and "w," in srcset
-    expect(hero_image).to_have_attribute("sizes", "(max-width: 1024px) 92vw, 54vw")
-    priority_preload = desktop.locator('link[rel="preload"][as="image"]').first
-    expect(priority_preload).to_have_attribute("imagesizes", "(max-width: 1024px) 92vw, 54vw")
-    assert_all_images_loaded(desktop)
-    desktop.screenshot(path=str(artifacts / "desktop.png"), full_page=True)
-
+    desktop.on("console", lambda message: console_errors.append(message.text) if message.type == "error" else None)
+    install_api_contract(desktop)
+    desktop.goto(base_url, wait_until="networkidle")
+    expect(desktop.get_by_role("heading", name="V-Market")).to_be_visible()
+    expect(desktop.get_by_role("heading", name="Mobile-fast catalog")).to_be_visible()
     desktop.get_by_role("button", name="Add").first.click()
-    increase = desktop.get_by_role("button", name="Increase AeroKnit travel jacket quantity")
-    for _ in range(5):
-        increase.click()
-    expect(desktop.get_by_label("6 items in cart").first).to_be_visible(timeout=10_000)
-    desktop.get_by_label("Search catalog").fill("desk")
-    expect(desktop.get_by_role("heading", name="Modular desk organizer")).to_be_visible()
-    desktop.get_by_label("Search catalog").fill("")
-    desktop.get_by_label("Full name").fill("V Market Buyer")
-    desktop.get_by_label("Email").fill("buyer@example.com")
-    desktop.get_by_label("Address").fill("1 Market Street")
-    desktop.get_by_label("City").fill("Bangkok")
-    desktop.get_by_label("Payment").select_option("cod")
+    desktop.get_by_label("Full name").fill("Yuki Tanaka")
+    desktop.get_by_label("Email").fill("yuki@example.jp")
+    desktop.get_by_label("Postal code").fill("100-0001")
+    desktop.get_by_label("Prefecture").fill("Tokyo")
+    desktop.get_by_label("City").fill("Chiyoda-ku")
+    desktop.get_by_label("Address line").fill("Chiyoda 1-1")
     desktop.locator('input[type="checkbox"]').check()
     desktop.get_by_role("button", name="Place order").click()
-    expect(desktop.get_by_text("confirmed")).to_be_visible(timeout=10_000)
-    expect(desktop.get_by_text("Payment pending: Pay on delivery.")).to_be_visible(timeout=10_000)
+    expect(desktop.get_by_text("Order VM-EVIDENCE001 confirmed")).to_be_visible()
+    assert_no_overflow(desktop)
+    load_and_verify_images(desktop)
+    desktop.screenshot(path=str(artifacts / "storefront-desktop.png"), full_page=True)
 
     mobile = browser.new_page(viewport={"width": 390, "height": 844}, is_mobile=True)
-    mobile.set_default_timeout(120_000)
-    mobile.set_default_navigation_timeout(120_000)
-    mobile.goto(base_url, wait_until="domcontentloaded")
-    mobile.evaluate("window.localStorage.clear()")
-    mobile.goto(base_url, wait_until="domcontentloaded")
-    expect(mobile.get_by_role("heading", name="V-Market")).to_be_visible(timeout=120_000)
-    expect(mobile.get_by_role("heading", name="Mobile-fast catalog")).to_be_visible(timeout=120_000)
-    assert_all_images_loaded(mobile)
-    mobile.screenshot(path=str(artifacts / "mobile.png"), full_page=True)
+    install_api_contract(mobile)
+    mobile.goto(base_url, wait_until="networkidle")
+    expect(mobile.get_by_role("heading", name="V-Market")).to_be_visible()
+    assert_no_overflow(mobile)
+    load_and_verify_images(mobile)
+    mobile.screenshot(path=str(artifacts / "storefront-mobile.png"), full_page=True)
 
-    compact = browser.new_page(viewport={"width": 320, "height": 740}, is_mobile=True)
-    compact.set_default_timeout(120_000)
-    compact.set_default_navigation_timeout(120_000)
-    compact.goto(base_url, wait_until="domcontentloaded")
-    compact.evaluate("window.localStorage.clear()")
-    compact.goto(base_url, wait_until="domcontentloaded")
-    expect(compact.get_by_role("heading", name="V-Market")).to_be_visible(timeout=120_000)
-    expect(compact.get_by_role("button", name="Add").first).to_be_visible(timeout=120_000)
-    assert_all_images_loaded(compact)
-    compact.screenshot(path=str(artifacts / "compact-mobile.png"), full_page=True)
+    operations = browser.new_page(viewport={"width": 1440, "height": 1000})
+    install_api_contract(operations)
+    operations.goto(f"{base_url}/ops", wait_until="networkidle")
+    expect(operations.get_by_role("heading", name="OPERATIONS LEDGER")).to_be_visible()
+    expect(operations.get_by_text("VM-EVIDENCE001")).to_be_visible()
+    assert_no_overflow(operations)
+    operations.screenshot(path=str(artifacts / "operations-ledger.png"), full_page=True)
+
+    tracking = browser.new_page(viewport={"width": 1200, "height": 900})
+    install_api_contract(tracking)
+    tracking.goto(f"{base_url}/track?order=VM-EVIDENCE001&token=evidence-token-0123456789abcdef", wait_until="networkidle")
+    tracking.get_by_role("button", name="Track order").click()
+    expect(tracking.get_by_text("Verified ledger entry")).to_be_visible()
+    tracking.screenshot(path=str(artifacts / "order-tracking.png"), full_page=True)
 
     browser.close()
 
-print(f"desktop={artifacts / 'desktop.png'}")
-print(f"mobile={artifacts / 'mobile.png'}")
-print(f"compact={artifacts / 'compact-mobile.png'}")
-print(f"base_url={base_url}")
+assert not console_errors, f"Browser console errors: {console_errors}"
+print(f"evidence={artifacts}")

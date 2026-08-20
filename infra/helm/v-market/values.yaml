@@ -1,0 +1,26 @@
+replicaCount: 2
+
+image:
+  repository: ghcr.io/example/v-market-backend
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  port: 80
+  targetPort: 8080
+
+config:
+  deploymentEnvironment: production
+  datasourceUrl: jdbc:postgresql://postgres.example:5432/vmarket
+  redisUrl: redis://redis.example:6379
+  tracingSamplingProbability: "0.1"
+
+secretName: v-market-secrets
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 750m
+    memory: 768Mi

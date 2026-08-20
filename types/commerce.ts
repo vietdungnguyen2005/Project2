@@ -6,15 +6,10 @@ export type Product = {
   description: string;
   price: number;
   inventory: number;
-  rating: number;
-  reviewCount: number;
-  badge: string;
-  shippingSla: string;
+  currency: "JPY";
   image: {
     src: string;
     alt: string;
-    width: number;
-    height: number;
   };
 };
 
@@ -36,28 +31,28 @@ export type CartTotals = {
   itemCount: number;
 };
 
-export type DeliveryWindow = "standard" | "express";
-
 export type PaymentMethod = "invoice" | "cod";
 
 export type CheckoutForm = {
   name: string;
   email: string;
-  address: string;
+  postalCode: string;
+  prefecture: string;
   city: string;
-  deliveryWindow: DeliveryWindow;
+  addressLine: string;
   paymentMethod: PaymentMethod;
   privacyAccepted: boolean;
 };
 
 export type Order = {
-  id: string;
-  cart: Cart;
-  totals: CartTotals;
-  customer: CheckoutForm;
+  orderNumber: string;
+  trackingToken: string;
+  paymentStatus: "PENDING";
+  fulfillmentStatus: "RECEIVED" | "PROCESSING" | "SHIPPED" | "DELIVERED";
+  subtotalMinor: number;
+  shippingMinor: number;
+  taxMinor: number;
+  grandTotalMinor: number;
+  currency: "JPY";
   createdAt: string;
-  privacyAcceptedAt: string;
-  status: "confirmed";
-  paymentStatus: "pending";
-  fulfillmentStatus: "received";
 };

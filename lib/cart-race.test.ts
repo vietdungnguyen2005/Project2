@@ -1,8 +1,44 @@
 import { describe, expect, it } from "vitest";
-import { calculateCartTotals, createOrder, filterProducts } from "@/lib/commerce";
+import { calculateCartTotals, filterProducts } from "@/lib/commerce";
 import { readStoredCart, writeStoredCart } from "@/lib/cart-storage";
 import { applyQuantity, CartMutationCoordinator, emptyCart } from "@/lib/cart-race";
-import { products } from "@/data/products";
+import type { Product } from "@/types/commerce";
+
+const products: Product[] = [
+  {
+    id: "VM-001",
+    vendor: "Nami Studio",
+    name: "AeroKnit travel jacket",
+    category: "Apparel",
+    description: "Travel jacket",
+    price: 11_000,
+    inventory: 32,
+    currency: "JPY",
+    image: { src: "/products/aeroknit-travel-jacket.jpg", alt: "Travel jacket" },
+  },
+  {
+    id: "VM-007",
+    vendor: "Orbit Works",
+    name: "Magnetic cable dock",
+    category: "Office",
+    description: "Desk cable dock",
+    price: 3_600,
+    inventory: 84,
+    currency: "JPY",
+    image: { src: "/products/magnetic-cable-dock.jpg", alt: "Cable dock" },
+  },
+  {
+    id: "VM-002",
+    vendor: "Riverbyte",
+    name: "Modular desk organizer",
+    category: "Office",
+    description: "Stackable desk trays",
+    price: 5_700,
+    inventory: 58,
+    currency: "JPY",
+    image: { src: "/products/modular-desk-organizer.jpg", alt: "Desk organizer" },
+  },
+];
 
 describe("CartMutationCoordinator", () => {
   it("aborts the previous request for a product when a new quantity is prepared", () => {
@@ -30,31 +66,19 @@ describe("commerce helpers", () => {
   it("filters and sorts the catalog without mutating source order", () => {
     const filtered = filterProducts(products, "desk", "All", "price-asc");
 
-    expect(filtered.map((product) => product.id)).toEqual(["vm-007", "vm-002"]);
-    expect(products[0]?.id).toBe("vm-001");
+    expect(filtered.map((product) => product.id)).toEqual(["VM-007", "VM-002"]);
+    expect(products[0]?.id).toBe("VM-001");
   });
 
-  it("calculates checkout totals and creates an order reference", () => {
-    const cart = applyQuantity(emptyCart(), "vm-001", 2);
+  it("calculates the same JPY checkout totals as the backend policy", () => {
+    const cart = applyQuantity(emptyCart(), "VM-001", 2);
     const totals = calculateCartTotals(cart, products);
-    const order = createOrder(cart, products, {
-      name: "V Market Buyer",
-      email: "buyer@example.com",
-      address: "1 Market Street",
-      city: "Bangkok",
-      deliveryWindow: "standard",
-      paymentMethod: "invoice",
-      privacyAccepted: true,
-    });
 
     expect(totals).toMatchObject({
-      subtotal: 148,
+      subtotal: 22_000,
       shipping: 0,
       itemCount: 2,
     });
-    expect(order.id).toMatch(/^VM-/);
-    expect(order.status).toBe("confirmed");
-    expect(order.paymentStatus).toBe("pending");
   });
 });
 

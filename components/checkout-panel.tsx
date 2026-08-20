@@ -22,10 +22,6 @@ type CheckoutPanelProps = {
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 };
 
-function paymentLabel(method: CheckoutForm["paymentMethod"]): string {
-  return method === "cod" ? "Pay on delivery" : "Invoice before dispatch";
-}
-
 export function CheckoutPanel({
   cartItems,
   checkout,
@@ -124,18 +120,28 @@ export function CheckoutPanel({
             />
           </label>
           <label className="grid gap-1 text-sm font-semibold text-zinc-700">
-            Address
+            Postal code
             <input
               required
-              minLength={5}
-              maxLength={160}
-              value={checkout.address}
-              onChange={(event) => onCheckoutChange({ ...checkout, address: event.target.value })}
+              pattern="[0-9]{3}-?[0-9]{4}"
+              placeholder="100-0001"
+              value={checkout.postalCode}
+              onChange={(event) => onCheckoutChange({ ...checkout, postalCode: event.target.value })}
               className="h-10 rounded-md border border-zinc-200 px-3 text-zinc-950 outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
             />
           </label>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-            <label className="grid gap-1 text-sm font-semibold text-zinc-700">
+            <label className="grid min-w-0 gap-1 text-sm font-semibold text-zinc-700">
+              Prefecture
+              <input
+                required
+                maxLength={40}
+                value={checkout.prefecture}
+                onChange={(event) => onCheckoutChange({ ...checkout, prefecture: event.target.value })}
+                className="h-10 w-full min-w-0 rounded-md border border-zinc-200 px-3 text-zinc-950 outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
+              />
+            </label>
+            <label className="grid min-w-0 gap-1 text-sm font-semibold text-zinc-700">
               City
               <input
                 required
@@ -143,26 +149,21 @@ export function CheckoutPanel({
                 maxLength={80}
                 value={checkout.city}
                 onChange={(event) => onCheckoutChange({ ...checkout, city: event.target.value })}
-                className="h-10 rounded-md border border-zinc-200 px-3 text-zinc-950 outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
+                className="h-10 w-full min-w-0 rounded-md border border-zinc-200 px-3 text-zinc-950 outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
               />
             </label>
-            <label className="grid gap-1 text-sm font-semibold text-zinc-700">
-              Delivery
-              <select
-                value={checkout.deliveryWindow}
-                onChange={(event) =>
-                  onCheckoutChange({
-                    ...checkout,
-                    deliveryWindow: event.target.value as CheckoutForm["deliveryWindow"],
-                  })
-                }
-                className="h-10 rounded-md border border-zinc-200 bg-white px-3 text-zinc-950 outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
-              >
-                <option value="standard">Standard</option>
-                <option value="express">Express</option>
-              </select>
-            </label>
           </div>
+          <label className="grid gap-1 text-sm font-semibold text-zinc-700">
+            Address line
+            <input
+              required
+              minLength={5}
+              maxLength={160}
+              value={checkout.addressLine}
+              onChange={(event) => onCheckoutChange({ ...checkout, addressLine: event.target.value })}
+              className="h-10 rounded-md border border-zinc-200 px-3 text-zinc-950 outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
+            />
+          </label>
           <label className="grid gap-1 text-sm font-semibold text-zinc-700">
             Payment
             <select
@@ -216,15 +217,17 @@ export function CheckoutPanel({
           >
             <div className="flex items-center gap-2 font-black">
               <CheckCircle2 aria-hidden className="size-4" />
-              Order {order.id} confirmed
+              Order {order.orderNumber} confirmed
             </div>
             <p className="mt-1">
-              Receipt sent to {order.customer.email}. Total {formatCurrency(order.totals.grandTotal)}.
+              Order recorded durably. Keep this bearer token private:
             </p>
+            <code className="mt-2 block break-all rounded bg-white/70 p-2 text-xs">{order.trackingToken}</code>
             <p className="mt-2 inline-flex items-center gap-2 font-semibold">
               <ReceiptText aria-hidden className="size-4" />
-              Payment pending: {paymentLabel(order.customer.paymentMethod)}.
+              Payment pending. Total {formatCurrency(order.grandTotalMinor)}.
             </p>
+            <a href={`/track?order=${encodeURIComponent(order.orderNumber)}&token=${encodeURIComponent(order.trackingToken)}`} className="mt-3 inline-flex min-h-10 items-center font-black underline decoration-2 underline-offset-4">Open tracking timeline</a>
           </div>
         ) : null}
       </div>

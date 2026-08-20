@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: v-market-api
+    runtime: docker
+    repo: https://github.com/vietdungnguyen2005/Project2
+    branch: main
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    region: singapore
+    healthCheckPath: /actuator/health/readiness
+    envVars:
+      - key: SPRING_DATASOURCE_URL
+        sync: false
+      - key: SPRING_DATASOURCE_USERNAME
+        sync: false
+      - key: SPRING_DATASOURCE_PASSWORD
+        sync: false
+      - key: SPRING_DATA_REDIS_URL
+        sync: false
+      - key: BFF_SHARED_SECRET
+        sync: false
+      - key: VMARKET_OPS_SECRET
+        sync: false
+      - key: DEPLOYMENT_ENVIRONMENT
+        value: production
+

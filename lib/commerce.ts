@@ -1,14 +1,14 @@
-import type { Cart, CartTotals, CheckoutForm, Order, Product } from "@/types/commerce";
+import type { Cart, CartTotals, Product } from "@/types/commerce";
 
-export type SortMode = "featured" | "price-asc" | "rating-desc";
+export type SortMode = "featured" | "price-asc" | "stock-desc";
 
 export const categories = ["All", "Apparel", "Home", "Office", "Travel"] as const;
 export type CategoryFilter = (typeof categories)[number];
 
 export function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat("ja-JP", {
     style: "currency",
-    currency: "USD",
+    currency: "JPY",
     maximumFractionDigits: 0,
   }).format(value);
 }
@@ -33,8 +33,8 @@ export function filterProducts(
       return a.price - b.price;
     }
 
-    if (sortMode === "rating-desc") {
-      return b.rating - a.rating;
+    if (sortMode === "stock-desc") {
+      return b.inventory - a.inventory;
     }
 
     return (featuredIndex.get(a.id) ?? 0) - (featuredIndex.get(b.id) ?? 0);
@@ -48,7 +48,7 @@ export function calculateCartTotals(cart: Cart, catalog: Product[]): CartTotals 
   }, 0);
 
   const itemCount = cart.lines.reduce((total, line) => total + line.quantity, 0);
-  const shipping = itemCount === 0 || subtotal >= 120 ? 0 : 9;
+  const shipping = itemCount === 0 || subtotal >= 12_000 ? 0 : 900;
   const tax = Math.round(subtotal * 0.08 * 100) / 100;
 
   return {
@@ -57,22 +57,5 @@ export function calculateCartTotals(cart: Cart, catalog: Product[]): CartTotals 
     tax,
     grandTotal: subtotal + shipping + tax,
     itemCount,
-  };
-}
-
-export function createOrder(cart: Cart, catalog: Product[], customer: CheckoutForm): Order {
-  const id = `VM-${Date.now().toString(36).toUpperCase()}`;
-  const createdAt = new Date().toISOString();
-
-  return {
-    id,
-    cart,
-    totals: calculateCartTotals(cart, catalog),
-    customer,
-    createdAt,
-    privacyAcceptedAt: createdAt,
-    status: "confirmed",
-    paymentStatus: "pending",
-    fulfillmentStatus: "received",
   };
 }

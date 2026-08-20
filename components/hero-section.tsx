@@ -2,7 +2,7 @@
 
 import { Gauge, Search, ShieldCheck, ShoppingCart, Truck, type LucideIcon } from "lucide-react";
 import Image from "next/image";
-import { heroProduct } from "@/data/products";
+import type { Product } from "@/types/commerce";
 
 type Guarantee = {
   icon: LucideIcon;
@@ -11,16 +11,17 @@ type Guarantee = {
 };
 
 const guarantees: Guarantee[] = [
-  { icon: Gauge, label: "3G-ready catalog", value: "AVIF/WebP srcsets" },
-  { icon: ShieldCheck, label: "Race-safe cart", value: "Abort stale updates" },
-  { icon: Truck, label: "Vendor SLA", value: "Same-day dispatch" },
+  { icon: Gauge, label: "Legacy intake", value: "UTF-8 + CP932" },
+  { icon: ShieldCheck, label: "Race-safe order", value: "Locks + idempotency" },
+  { icon: Truck, label: "Audited delivery", value: "Forward-only states" },
 ];
 
 type HeroSectionProps = {
+  heroProduct?: Product;
   totalItems: number;
 };
 
-export function HeroSection({ totalItems }: HeroSectionProps) {
+export function HeroSection({ heroProduct, totalItems }: HeroSectionProps) {
   return (
     <section className="relative overflow-hidden border-b border-zinc-200 bg-[#f7f5ef]">
       <div className="mx-auto grid min-h-[92svh] max-w-7xl items-center gap-10 px-4 py-6 sm:px-6 lg:grid-cols-[0.9fr_1.1fr] lg:px-8">
@@ -30,6 +31,13 @@ export function HeroSection({ totalItems }: HeroSectionProps) {
               V-Market
             </a>
             <div className="flex items-center gap-2">
+              <a
+                href="/ops"
+                className="hidden h-11 items-center rounded-md border border-zinc-300 bg-white px-3 text-xs font-black uppercase tracking-[0.12em] text-zinc-800 transition hover:border-zinc-950 sm:inline-flex"
+              >
+                Migration ops
+              </a>
+              <a href="/track" className="hidden h-11 items-center px-2 text-xs font-black uppercase tracking-[0.12em] text-zinc-700 hover:text-zinc-950 lg:inline-flex">Track</a>
               <a
                 href="#catalog-search"
                 aria-label="Search products"
@@ -50,15 +58,14 @@ export function HeroSection({ totalItems }: HeroSectionProps) {
 
           <div className="grid max-w-2xl gap-5">
             <p className="text-sm font-bold uppercase tracking-[0.18em] text-emerald-700">
-              Multi-vendor commerce without mobile drag
+              Commerce modernization without hidden drift
             </p>
             <h1 className="text-balance text-5xl font-black leading-[0.95] text-zinc-950 sm:text-6xl lg:text-7xl">
               V-Market
             </h1>
             <p className="max-w-xl text-pretty text-lg leading-8 text-zinc-700">
-              A production-ready marketplace storefront with optimized catalog media,
-              persistent cart state, order capture, and cart mutations built to stay correct under
-              rapid shopper input.
+              A working storefront backed by transactional inventory, opaque order tracking,
+              restartable Japanese legacy imports, and measurable reconciliation.
             </p>
           </div>
 
@@ -74,23 +81,28 @@ export function HeroSection({ totalItems }: HeroSectionProps) {
         </div>
 
         <div className="relative min-h-[48svh] lg:min-h-[78svh]">
-          <Image
-            src={heroProduct.image.src}
-            alt={heroProduct.image.alt}
-            width={heroProduct.image.width}
-            height={heroProduct.image.height}
-            sizes="(max-width: 1024px) 92vw, 54vw"
-            priority
-            className="absolute inset-0 h-full w-full rounded-lg object-cover shadow-2xl"
-          />
+          {heroProduct ? (
+            <Image
+              src={heroProduct.image.src}
+              alt={heroProduct.image.alt}
+              fill
+              sizes="(max-width: 1024px) 92vw, 54vw"
+              priority
+              className="rounded-lg object-cover shadow-2xl"
+            />
+          ) : (
+            <div className="absolute inset-0 rounded-lg bg-[repeating-linear-gradient(135deg,#18181b_0,#18181b_12px,#27272a_12px,#27272a_24px)]" />
+          )}
           <div className="absolute bottom-4 left-4 right-4 rounded-md bg-white/92 p-4 shadow-xl backdrop-blur sm:left-auto sm:w-80">
             <p className="text-xs font-bold uppercase tracking-[0.14em] text-emerald-700">
-              LCP candidate
+              Canonical product
             </p>
-            <p className="mt-1 text-lg font-black text-zinc-950">{heroProduct.name}</p>
+            <p className="mt-1 text-lg font-black text-zinc-950">
+              {heroProduct?.name ?? "Canonical catalog connecting"}
+            </p>
             <p className="mt-2 text-sm text-zinc-600">
-              Priority image, explicit dimensions, responsive sizes, and modern optimizer formats
-              enabled.
+              Price and available quantity are served by Spring Boot from PostgreSQL, with Redis as
+              a fail-open cache.
             </p>
           </div>
         </div>

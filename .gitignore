@@ -5,9 +5,11 @@ node_modules/
 out/
 dist/
 coverage/
+backend/target/
 qa-artifacts/
 next-dev.log
 cloudflare-env.d.ts
+*.tsbuildinfo
 *.log
 .env*
 !.env.example

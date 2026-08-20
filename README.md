@@ -1,72 +1,62 @@
-# V-Market
+# V-Market Modernization
 
-V-Market is a performance-first multi-vendor commerce shell built for mobile catalog traffic and race-safe cart operations.
+V-Market is a portfolio-grade commerce system built around a problem common in Japanese outsourcing work: replacing fragile Shift-JIS/CP932 file exchange with a controlled, observable system without interrupting daily operations.
 
-Live URL: https://v-market.vmarket-vietdung2005.workers.dev
+The public storefront is deployable to Cloudflare Workers. A Java 21/Spring Boot API owns the catalog, transactional checkout, inventory, fulfillment, legacy imports, and reconciliation. PostgreSQL is the source of truth; Redis is a fail-open catalog cache.
+
+## Demonstrated capabilities
+
+- Durable guest checkout with server-owned JPY pricing, privacy acknowledgement, idempotency keys, deterministic lock order, and oversell protection.
+- Opaque-token order tracking that never returns customer PII.
+- Audited, one-step fulfillment transitions in an operations console.
+- UTF-8 and CP932 CSV intake, validation quarantine, checksum deduplication, restartable Spring Batch chunks, checkpoints, and post-import reconciliation.
+- Redis cache-aside with TTL, invalidation after imports, outage fallback, and hit/miss/error metrics.
+- BFF trust boundary: browser requests never receive the backend or operations secrets.
+- Prometheus metrics, health probes, Micrometer tracing/OTLP support, and request correlation IDs.
+- Non-root Docker image, local Compose stack, Kubernetes Helm chart, and three-lane GitHub Actions CI.
 
 ## Architecture
 
-- **Framework:** Next.js App Router with strict TypeScript.
-- **Server state:** TanStack Query owns cart cache state, optimistic updates, query cancellation, and mutation settlement.
-- **Styling:** Tailwind CSS v4 through `@tailwindcss/postcss`, with responsive grids from 320px mobile to wide desktop.
-- **Media delivery:** Next Image is configured for AVIF/WebP output, responsive device sizes, explicit dimensions, and long-lived optimized image caching.
-- **SEO:** Global App Router metadata covers canonical URL, robots, Open Graph, and Twitter summary card tags.
-- **Deployment:** Cloudflare Workers via the OpenNext Cloudflare adapter.
+```mermaid
+flowchart LR
+  U[Shopper / operator] --> CF[Next.js BFF on Cloudflare]
+  CF -->|server-only shared secret| API[Java 21 + Spring Boot]
+  API --> PG[(PostgreSQL)]
+  API --> R[(Redis cache)]
+  L[CP932 / UTF-8 vendor CSV] --> CF
+  API --> M[Prometheus / OTLP]
+```
 
-## Performance Decisions
+Cloudflare is a long-lived free frontend host. The backend remains portable: run it with Compose now, then deploy the same image to a free container host or Kubernetes without changing browser contracts. No AWS resource is required for the current demo.
 
-- The first-viewport hero image uses `priority`, explicit source dimensions, and responsive `sizes` so it becomes the deliberate LCP candidate.
-- Product cards use fixed aspect-ratio media wrappers plus image `width` and `height`, preventing catalog layout shifts while images stream over slower networks.
-- Product and social images are stored in `public/products` and `public/social`, so runtime catalog delivery does not depend on third-party image availability.
-- The catalog relies on Next Image-generated AVIF/WebP `srcset` output instead of shipping one oversized image to every viewport.
-- System fonts are used to avoid server-side font fetching and reduce cold-start render risk.
-- The cart API route uses `Cache-Control: no-store`, while client state is cached and reconciled by TanStack Query.
-- Shopper flow includes search, category filters, sort modes, persistent cart state, checkout capture, server-normalized order validation, and order reference confirmation.
+## Run locally
 
-## Cart Race-Control Model
+Requirements: Node.js 24, Java 21, and Docker.
 
-Rapid quantity changes are coordinated per product:
+```bash
+cp .env.example .env.local
+docker compose up -d postgres redis
+cd backend && ./mvnw spring-boot:run
+# in another terminal, from the repository root
+npm ci && npm run dev
+```
 
-1. Preparing a new quantity mutation aborts the previous in-flight request for that product.
-2. TanStack Query applies the new quantity optimistically before the network round trip completes.
-3. Every mutation receives a sequence number.
-4. Success and rollback handlers update cached cart state only when their sequence is still current.
-5. Aborted request errors are ignored, so stale backend payloads cannot overwrite the latest shopper intent.
+Use `http://localhost:3000` for the storefront, `/track` for customer tracking, and `/ops` for migration/reconciliation/fulfillment operations.
 
 ## Verification
 
-Run the local gates:
-
 ```bash
-npm run test
-npm run lint
-npm run build
-npm audit --audit-level=high
-npx opennextjs-cloudflare build
+npm run verify
+cd backend && ./mvnw verify
+docker compose config --quiet
+docker build -t v-market-backend:local backend
+helm lint infra/helm/v-market
 ```
 
-Browser QA can be run through the package script once the app is serving:
+Backend integration tests launch PostgreSQL 17 and Redis 8 with Testcontainers. See [docs/EVIDENCE.md](docs/EVIDENCE.md) for the requirement-to-proof matrix and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for design trade-offs.
 
-```bash
-npm run test:e2e
-```
+## Secrets and deployment
 
-For rendered browser QA:
+Copy only variable names from `.env.example`; never commit real values. Production startup rejects the documented local secrets. `BFF_SHARED_SECRET` and `VMARKET_OPS_SECRET` must be different random values of at least 32 characters in production.
 
-```bash
-python C:\Users\steve\.codex\skills\webapp-testing\scripts\with_server.py --server "npm run start -- --hostname 127.0.0.1" --port 3000 --timeout 60 -- python tools\qa_playwright.py
-```
-
-Against a deployed URL:
-
-```powershell
-$env:BASE_URL="https://v-market.vmarket-vietdung2005.workers.dev"; python tools\qa_playwright.py
-```
-
-Cloudflare deploy helper:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File tools\deploy-cloudflare.ps1
-```
-
-See `docs/PAIN_POINT_PROOF.md` and `docs/CLOUDFLARE_DEPLOYMENT.md` for requirement-level evidence.
+The existing Cloudflare URL may continue serving an earlier frontend deployment until this revision is deliberately deployed and `BACKEND_ORIGIN` is configured. The repository does not claim a live backend where none has been provisioned.

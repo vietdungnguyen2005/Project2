@@ -63,7 +63,7 @@ export function CatalogControls({
           >
             <option value="featured">Featured</option>
             <option value="price-asc">Price: low to high</option>
-            <option value="rating-desc">Top rated</option>
+            <option value="stock-desc">Stock: high to low</option>
           </select>
         </label>
       </div>

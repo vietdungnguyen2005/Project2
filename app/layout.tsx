@@ -11,14 +11,14 @@ export const metadata: Metadata = {
     template: "%s | V-Market",
   },
   description:
-    "V-Market is a performance-first multi-vendor e-commerce platform optimized for mobile catalog delivery, Core Web Vitals, and race-safe cart interactions.",
+    "A production-minded commerce modernization case study with Spring Boot, PostgreSQL, Redis, restartable legacy imports, reconciliation, and audited fulfillment.",
   applicationName: "V-Market",
   keywords: [
     "multi-vendor marketplace",
     "e-commerce platform",
     "Next.js commerce",
-    "Core Web Vitals",
-    "optimized product catalog",
+    "Spring Boot modernization",
+    "legacy data migration",
   ],
   authors: [{ name: "V-Market" }],
   creator: "V-Market",
@@ -33,7 +33,7 @@ export const metadata: Metadata = {
     siteName: "V-Market",
     title: "V-Market | Next-Gen Multi-Vendor Commerce",
     description:
-      "A high-traffic marketplace architecture with optimized media delivery and optimistic, cancellation-aware cart operations.",
+      "A full-stack modernization case study with durable checkout, CP932 imports, reconciliation, and operational evidence.",
     images: [
       {
         url: "/social/v-market-og.jpg",
@@ -47,7 +47,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "V-Market | Next-Gen Multi-Vendor Commerce",
     description:
-      "Optimized catalog media, Core Web Vitals defaults, and race-safe cart operations for mobile shoppers.",
+      "Durable commerce and legacy modernization on Java, PostgreSQL, Redis, and Cloudflare.",
     images: ["/social/v-market-og.jpg"],
   },
   robots: {

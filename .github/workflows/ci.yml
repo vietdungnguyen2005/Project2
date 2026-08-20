@@ -7,7 +7,7 @@ on:
       - main
 
 jobs:
-  verify:
+  frontend:
     runs-on: ubuntu-latest
 
     steps:
@@ -21,13 +21,61 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
-      - name: Unit tests
-        run: npm run test
+      - name: Verify frontend
+        run: npm run verify
 
-      - name: Lint
-        run: npm run lint
+      - name: Dependency audit
+        run: npm audit --audit-level=high
 
-      - name: Build
-        run: npm run build
+      - name: Setup Python for browser QA
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Chromium
+        run: python -m pip install playwright && python -m playwright install --with-deps chromium
+
+      - name: Browser contract and responsive QA
+        shell: bash
+        run: |
+          npm run start -- --hostname 127.0.0.1 &
+          server_pid=$!
+          trap 'kill $server_pid' EXIT
+          for attempt in {1..30}; do
+            curl --fail --silent http://127.0.0.1:3000 >/dev/null && break
+            sleep 1
+          done
+          npm run test:e2e
+
+      - name: Upload browser evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-evidence
+          path: docs/evidence/*.png
+
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - name: Test and format-check backend
+        working-directory: backend
+        run: ./mvnw --batch-mode verify
+      - name: Build non-root runtime image
+        run: docker build --tag v-market-backend:ci backend
+
+  infrastructure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - name: Validate Compose
+        run: docker compose config --quiet
+      - name: Lint Helm chart
+        run: helm lint infra/helm/v-market && helm template portfolio infra/helm/v-market > /dev/null

@@ -11,7 +11,7 @@ Validated on 2026-08-20 against the public deployment.
 | Retry-safe checkout | Retrying one synthetic checkout returned the same order; `VM-008` inventory decreased once and the order entered `RECEIVED` |
 | Browser QA | Chromium desktop and 390×844 mobile passed with no console errors |
 
-The deployed backend source commit was `79206ea`. Cloudflare injects both the BFF and operations credentials server-side; they are absent from the browser bundle and Git history.
+The validated backend revision is `5ad16e9`. Cloudflare injects both the BFF and operations credentials server-side; they are absent from the browser bundle and Git history.
 
 ![Public desktop deployment](live-desktop.png)
 

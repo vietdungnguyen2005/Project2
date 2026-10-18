@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:worker": "opennextjs-cloudflare build",
     "start": "next start",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
@@ -16,12 +17,13 @@
     "test:e2e": "python tools/qa_playwright.py"
   },
   "dependencies": {
-    "@opennextjs/cloudflare": "1.20.2",
+    "@opennextjs/cloudflare": "1.20.12",
     "@tanstack/react-query": "5.101.4",
     "lucide-react": "0.468.0",
-    "next": "16.3.0",
+    "next": "16.4.2",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
@@ -35,15 +37,15 @@
     "tailwindcss": "4.3.3",
     "typescript": "5.9.3",
     "typescript-eslint": "8.65.0",
-    "vitest": "4.1.10",
-    "wrangler": "4.120.0"
+    "vitest": "4.1.12",
+    "wrangler": "4.151.1"
   },
   "overrides": {
-    "@node-minify/core": "8.0.5",
-    "@node-minify/terser": "8.0.5",
-    "brace-expansion": "5.0.9",
+    "@node-minify/core": {
+      "glob": "10.5.0"
+    },
     "nanoid": "6.0.1",
     "postcss": "8.5.26",
-    "sharp": "0.35.3"
+    "sharp": "0.35.5"
   }
 }

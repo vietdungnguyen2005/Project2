@@ -7,6 +7,7 @@ import { formatCurrency } from "@/lib/commerce";
 import type { Product } from "@/types/commerce";
 
 type ProductCardProps = {
+  disabled?: boolean;
   product: Product;
   index: number;
   quantity: number;
@@ -14,6 +15,7 @@ type ProductCardProps = {
 };
 
 export function ProductCard({
+  disabled = false,
   product,
   index,
   quantity,
@@ -61,7 +63,7 @@ export function ProductCard({
           {quantity === 0 ? (
             <button
               type="button"
-              disabled={product.inventory === 0}
+              disabled={disabled || product.inventory === 0}
               onClick={() => onQuantityChange(product.id, 1)}
               className="inline-flex h-11 items-center gap-2 rounded-md bg-zinc-950 px-4 text-sm font-semibold text-white transition hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-zinc-300"
             >
@@ -73,6 +75,7 @@ export function ProductCard({
               <button
                 type="button"
                 aria-label={`Decrease ${product.name} quantity`}
+                disabled={disabled}
                 onClick={() => onQuantityChange(product.id, quantity - 1)}
                 className="grid place-items-center transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-inset focus:ring-emerald-500"
               >
@@ -87,6 +90,7 @@ export function ProductCard({
               <button
                 type="button"
                 aria-label={`Increase ${product.name} quantity`}
+                disabled={disabled}
                 onClick={() => onQuantityChange(product.id, quantity + 1)}
                 className="grid place-items-center transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-inset focus:ring-emerald-500"
               >

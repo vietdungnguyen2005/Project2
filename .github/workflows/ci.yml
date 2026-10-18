@@ -55,6 +55,9 @@ jobs:
           name: browser-evidence
           path: docs/evidence/*.png
 
+      - name: Build Cloudflare Worker bundle (no deployment)
+        run: npm run build:worker
+
   backend:
     runs-on: ubuntu-latest
     steps:

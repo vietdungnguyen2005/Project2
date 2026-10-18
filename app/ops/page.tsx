@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { OperationsConsole } from "@/components/operations-console";
+import { OperatorAccess } from "@/components/operator-access";
 
 export const metadata: Metadata = {
   title: "Migration Operations",
@@ -7,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function OperationsPage() {
-  return <OperationsConsole />;
+  return <OperatorAccess><OperationsConsole /></OperatorAccess>;
 }

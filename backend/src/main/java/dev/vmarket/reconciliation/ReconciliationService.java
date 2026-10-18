@@ -37,8 +37,10 @@ public class ReconciliationService {
                         """).param("id", runId).param("jobId", migrationJobId).update();
 
         var sourceRows = jdbc.sql("""
-                        SELECT s.external_sku AS sku, s.on_hand AS expected_quantity, s.price_minor AS expected_price,
-                               i.on_hand AS actual_quantity, p.price_minor AS actual_price
+                        SELECT s.external_sku AS sku, s.applied_on_hand AS expected_quantity, s.price_minor AS expected_price,
+                               i.on_hand AS actual_quantity, p.price_minor AS actual_price,
+                               s.applied_stock_version AS expected_stock_version,i.version AS actual_stock_version,
+                               s.applied_product_version AS expected_product_version,p.version AS actual_product_version
                         FROM staged_import_row s
                         LEFT JOIN product p ON p.sku = s.external_sku
                         LEFT JOIN inventory_stock i ON i.product_id = p.id
@@ -50,12 +52,29 @@ public class ReconciliationService {
                 .list();
 
         List<Discrepancy> discrepancies = new ArrayList<>();
+        int changedRows = 0;
+        int stockNotVerifiedRows = 0;
         for (var row : sourceRows) {
+            boolean changed = false;
             if (row.actualQuantity() == null) {
                 discrepancies.add(insert(runId, row.sku(), "MISSING_PRODUCT", "present", "missing"));
+                stockNotVerifiedRows++;
                 continue;
             }
-            if (!row.expectedQuantity().equals(row.actualQuantity())) {
+            if (row.expectedStockVersion() == null) {
+                stockNotVerifiedRows++;
+            } else if (row.actualStockVersion() > row.expectedStockVersion()) {
+                changed = true;
+                stockNotVerifiedRows++;
+            } else if (row.actualStockVersion() < row.expectedStockVersion()) {
+                stockNotVerifiedRows++;
+                discrepancies.add(insert(
+                        runId,
+                        row.sku(),
+                        "STOCK_VERSION_REGRESSION",
+                        row.expectedStockVersion().toString(),
+                        row.actualStockVersion().toString()));
+            } else if (!row.expectedQuantity().equals(row.actualQuantity())) {
                 discrepancies.add(insert(
                         runId,
                         row.sku(),
@@ -63,7 +82,18 @@ public class ReconciliationService {
                         row.expectedQuantity().toString(),
                         row.actualQuantity().toString()));
             }
-            if (!row.expectedPrice().equals(row.actualPrice())) {
+            if (row.expectedProductVersion() != null && row.actualProductVersion() > row.expectedProductVersion()) {
+                changed = true;
+            } else if (row.expectedProductVersion() != null
+                    && row.actualProductVersion() < row.expectedProductVersion()) {
+                discrepancies.add(insert(
+                        runId,
+                        row.sku(),
+                        "PRODUCT_VERSION_REGRESSION",
+                        row.expectedProductVersion().toString(),
+                        row.actualProductVersion().toString()));
+            } else if (row.expectedProductVersion() != null
+                    && !row.expectedPrice().equals(row.actualPrice())) {
                 discrepancies.add(insert(
                         runId,
                         row.sku(),
@@ -71,21 +101,34 @@ public class ReconciliationService {
                         row.expectedPrice().toString(),
                         row.actualPrice().toString()));
             }
+            if (changed) changedRows++;
         }
 
         jdbc.sql("""
-                        UPDATE reconciliation_run SET mismatch_count = :count, status = 'COMPLETED', completed_at = NOW()
+                        UPDATE reconciliation_run SET mismatch_count = :count, changed_since_import_rows=:changed, stock_not_verified_rows=:unverified, status = 'COMPLETED', completed_at = NOW()
                         WHERE id = :id
-                        """).param("count", discrepancies.size()).param("id", runId).update();
+                        """)
+                .param("count", discrepancies.size())
+                .param("changed", changedRows)
+                .param("unverified", stockNotVerifiedRows)
+                .param("id", runId)
+                .update();
         metrics.summary("vmarket.reconciliation.mismatches").record(discrepancies.size());
         return new ReconciliationReport(
-                runId, migrationJobId, "COMPLETED", discrepancies.size(), createdAt, discrepancies);
+                runId,
+                migrationJobId,
+                "COMPLETED",
+                discrepancies.size(),
+                changedRows,
+                stockNotVerifiedRows,
+                createdAt,
+                discrepancies);
     }
 
     @Transactional(readOnly = true)
     public List<ReconciliationReport> recent() {
         return jdbc.sql("""
-                        SELECT id, migration_job_id, status, mismatch_count, created_at
+                        SELECT id, migration_job_id, status, mismatch_count, changed_since_import_rows, stock_not_verified_rows, created_at
                         FROM reconciliation_run ORDER BY created_at DESC LIMIT 20
                         """)
                 .query((rs, rowNum) -> {
@@ -95,6 +138,8 @@ public class ReconciliationService {
                             rs.getObject("migration_job_id", UUID.class),
                             rs.getString("status"),
                             rs.getInt("mismatch_count"),
+                            rs.getInt("changed_since_import_rows"),
+                            rs.getInt("stock_not_verified_rows"),
                             rs.getTimestamp("created_at").toInstant(),
                             findDiscrepancies(id));
                 })
@@ -126,5 +171,13 @@ public class ReconciliationService {
     }
 
     private record SourceState(
-            String sku, Integer expectedQuantity, Integer expectedPrice, Integer actualQuantity, Integer actualPrice) {}
+            String sku,
+            Integer expectedQuantity,
+            Integer expectedPrice,
+            Integer actualQuantity,
+            Integer actualPrice,
+            Long expectedStockVersion,
+            Long actualStockVersion,
+            Long expectedProductVersion,
+            Long actualProductVersion) {}
 }

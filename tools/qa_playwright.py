@@ -3,7 +3,7 @@ from pathlib import Path
 from playwright.sync_api import expect, sync_playwright
 
 root = Path(__file__).resolve().parents[1]
-artifacts = root / "docs" / "evidence"
+artifacts = Path(os.environ.get("QA_ARTIFACT_DIR", str(root / "docs" / "evidence")))
 artifacts.mkdir(parents=True, exist_ok=True)
 base_url = os.environ.get("BASE_URL", "http://127.0.0.1:3000").rstrip("/")
 
@@ -23,7 +23,7 @@ catalog = [
 ]
 
 order = {
-    "orderNumber": "VM-EVIDENCE001", "trackingToken": "evidence-token-0123456789abcdef",
+    "orderNumber": "VM-EVIDENCE001", "trackingToken": "f" * 64,
     "paymentStatus": "PENDING", "fulfillmentStatus": "RECEIVED", "subtotalMinor": 11000,
     "shippingMinor": 900, "taxMinor": 880, "grandTotalMinor": 12780, "currency": "JPY",
     "createdAt": "2026-08-09T00:00:00Z",
@@ -36,6 +36,10 @@ tracked_order = {
 }
 
 def install_api_contract(page):
+    # This suite checks UI contracts with fixtures; backend session behavior has integration tests.
+    page.route("**/api/auth/session", lambda route: route.fulfill(json={
+        "authenticated": True, "username": "operator@example.test", "roles": ["ROLE_OPERATOR"], "csrfToken": "fixture-csrf"
+    }))
     page.route("**/api/catalog/products*", lambda route: route.fulfill(status=200, content_type="application/json", json=catalog))
     page.route("**/api/orders", lambda route: route.fulfill(status=201, json=order))
     page.route("**/api/orders/*?*", lambda route: route.fulfill(json=tracked_order))
@@ -109,7 +113,7 @@ with sync_playwright() as playwright:
 
     tracking = browser.new_page(viewport={"width": 1200, "height": 900})
     install_api_contract(tracking)
-    tracking.goto(f"{base_url}/track?order=VM-EVIDENCE001&token=evidence-token-0123456789abcdef", wait_until="networkidle")
+    tracking.goto(f"{base_url}/track?order=VM-EVIDENCE001&token={'f' * 64}", wait_until="networkidle")
     tracking.get_by_role("button", name="Track order").click()
     expect(tracking.get_by_text("Verified ledger entry")).to_be_visible()
     tracking.screenshot(path=str(artifacts / "order-tracking.png"), full_page=True)

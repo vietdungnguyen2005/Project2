@@ -1,7 +1,12 @@
 TRUNCATE TABLE
+    closed_checkout_intent,
+    spring_session_attributes,
+    spring_session,
+    auth_login_window,
     reconciliation_discrepancy,
     reconciliation_run,
     staged_import_row,
+    import_work_item,
     migration_job,
     inventory_movement,
     order_item,

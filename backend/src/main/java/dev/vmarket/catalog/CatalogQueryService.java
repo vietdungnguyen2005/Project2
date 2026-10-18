@@ -17,23 +17,55 @@ public class CatalogQueryService {
 
     @Transactional(readOnly = true)
     public List<ProductView> findActiveProducts() {
-        var cached = cache.read();
-        if (cached != null) {
-            return cached;
+        var metadata = cache.read();
+        if (metadata == null) {
+            metadata = jdbc.sql("""
+                            SELECT p.sku, v.name AS vendor_name, p.name, p.category, p.description,
+                                   p.price_minor, p.currency, p.image_path, p.image_alt
+                            FROM product p JOIN vendor v ON v.id = p.vendor_id
+                            WHERE p.active = TRUE AND v.active = TRUE
+                            ORDER BY p.sku
+                            """).query(ProductMetadata.class).list();
+            cache.write(metadata);
         }
-        var products = jdbc.sql("""
-                        SELECT p.sku, v.name AS vendor_name, p.name, p.category, p.description,
-                               p.price_minor, p.currency, p.image_path, p.image_alt,
-                               s.on_hand - s.reserved AS available_quantity
+        // Availability and eligibility always come from PostgreSQL, including on a Redis hit.
+        // This is a display snapshot, not a stock reservation; checkout still locks and revalidates.
+        var stock = jdbc.sql("""
+                        SELECT p.sku, s.on_hand - s.reserved AS available_quantity
                         FROM product p
                         JOIN vendor v ON v.id = p.vendor_id
                         JOIN inventory_stock s ON s.product_id = p.id
                         WHERE p.active = TRUE AND v.active = TRUE
-                        ORDER BY p.sku
-                        """).query(ProductView.class).list();
-        cache.write(products);
-        return products;
+                        """).query(StockView.class).list().stream()
+                .collect(java.util.stream.Collectors.toMap(StockView::sku, StockView::availableQuantity));
+        return metadata.stream()
+                .filter(product -> stock.containsKey(product.sku()))
+                .map(product -> new ProductView(
+                        product.sku(),
+                        product.vendorName(),
+                        product.name(),
+                        product.category(),
+                        product.description(),
+                        product.priceMinor(),
+                        product.currency(),
+                        product.imagePath(),
+                        product.imageAlt(),
+                        stock.get(product.sku())))
+                .toList();
     }
+
+    private record StockView(String sku, int availableQuantity) {}
+
+    public record ProductMetadata(
+            String sku,
+            String vendorName,
+            String name,
+            String category,
+            String description,
+            int priceMinor,
+            String currency,
+            String imagePath,
+            String imageAlt) {}
 
     public record ProductView(
             String sku,

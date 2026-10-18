@@ -12,6 +12,8 @@ record ReconciliationReport(
         UUID migrationJobId,
         String status,
         int mismatchCount,
+        int changedSinceImportRows,
+        int stockNotVerifiedRows,
         Instant createdAt,
         List<Discrepancy> discrepancies) {}
 

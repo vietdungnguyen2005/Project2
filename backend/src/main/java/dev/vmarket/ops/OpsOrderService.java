@@ -102,10 +102,15 @@ public class OpsOrderService {
             var details = objectMapper.writeValueAsString(Map.of("from", from, "to", to));
             jdbc.sql("""
                             INSERT INTO audit_event (id, actor, action, aggregate_type, aggregate_id, details)
-                            VALUES (:id, 'operations-console', 'FULFILLMENT_STATUS_CHANGED',
+                            VALUES (:id, :actor, 'FULFILLMENT_STATUS_CHANGED',
                                     'ORDER', :orderNumber, CAST(:details AS JSONB))
                             """)
                     .param("id", UUID.randomUUID())
+                    .param(
+                            "actor",
+                            org.springframework.security.core.context.SecurityContextHolder.getContext()
+                                    .getAuthentication()
+                                    .getName())
                     .param("orderNumber", orderNumber)
                     .param("details", details)
                     .update();

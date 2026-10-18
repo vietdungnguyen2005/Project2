@@ -5,13 +5,14 @@ import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
 import java.util.List;
 
 record CreateOrderRequest(
-        @Valid CustomerRequest customer, @NotEmpty List<@Valid OrderLineRequest> lines) {}
+        @NotNull @Valid CustomerRequest customer, @NotEmpty List<@Valid OrderLineRequest> lines) {}
 
 record CustomerRequest(
         @NotBlank @Size(max = 80) String name,
@@ -20,7 +21,7 @@ record CustomerRequest(
         @NotBlank @Size(max = 40) String prefecture,
         @NotBlank @Size(max = 80) String city,
         @NotBlank @Size(max = 160) String addressLine,
-        @Pattern(regexp = "^(INVOICE|COD)$") String paymentMethod,
+        @NotNull @Pattern(regexp = "^(INVOICE|COD)$") String paymentMethod,
         @AssertTrue boolean privacyAccepted) {}
 
 record OrderLineRequest(@NotBlank @Size(max = 64) String sku, int quantity) {}

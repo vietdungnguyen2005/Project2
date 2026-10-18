@@ -1,7 +1,7 @@
 "use client";
 
 import { CheckCircle2, ReceiptText, ShoppingCart } from "lucide-react";
-import type { FormEvent } from "react";
+import type { FormEvent, ReactNode } from "react";
 import { formatCurrency } from "@/lib/commerce";
 import type { CartLine, CartTotals, CheckoutForm, Order, Product } from "@/types/commerce";
 
@@ -15,6 +15,8 @@ type CheckoutPanelProps = {
   checkout: CheckoutForm;
   checkoutError: string;
   isSubmitting: boolean;
+  checkoutLocked: boolean;
+  recoveryControls: ReactNode;
   order: Order | null;
   totalItems: number;
   totals: CartTotals;
@@ -27,6 +29,8 @@ export function CheckoutPanel({
   checkout,
   checkoutError,
   isSubmitting,
+  checkoutLocked,
+  recoveryControls,
   order,
   totalItems,
   totals,
@@ -96,7 +100,9 @@ export function CheckoutPanel({
           </div>
         </dl>
 
-        <form className="mt-5 grid gap-3" onSubmit={onSubmit}>
+        {recoveryControls}
+        <form className="mt-5" onSubmit={onSubmit}>
+          <fieldset disabled={checkoutLocked} className="grid min-w-0 gap-3">
           <label className="grid gap-1 text-sm font-semibold text-zinc-700">
             Full name
             <input
@@ -196,12 +202,13 @@ export function CheckoutPanel({
           </label>
           <button
             type="submit"
-            disabled={totals.itemCount === 0 || isSubmitting}
+            disabled={totals.itemCount === 0 || isSubmitting || checkoutLocked}
             className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-emerald-700 px-4 text-sm font-black text-white transition hover:bg-zinc-950 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-zinc-300"
           >
             <ReceiptText aria-hidden className="size-4" />
-            {isSubmitting ? "Placing order..." : "Place order"}
+            {isSubmitting ? "Working..." : "Place order"}
           </button>
+          </fieldset>
         </form>
 
         {checkoutError ? (

@@ -34,7 +34,7 @@ spec:
               value: {{ .Values.config.redisUrl | quote }}
             - name: MANAGEMENT_TRACING_SAMPLING_PROBABILITY
               value: {{ .Values.config.tracingSamplingProbability | quote }}
-            {{- range $name := list "SPRING_DATASOURCE_USERNAME" "SPRING_DATASOURCE_PASSWORD" "BFF_SHARED_SECRET" "VMARKET_OPS_SECRET" }}
+            {{- range $name := list "SPRING_DATASOURCE_USERNAME" "SPRING_DATASOURCE_PASSWORD" "BFF_SHARED_SECRET" "VMARKET_OPS_SECRET" "CHECKOUT_REPLAY_KEY" }}
             - name: {{ $name }}
               valueFrom:
                 secretKeyRef:

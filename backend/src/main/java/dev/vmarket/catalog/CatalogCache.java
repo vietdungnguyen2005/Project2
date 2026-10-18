@@ -11,7 +11,8 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class CatalogCache {
-    static final String KEY = "vmarket:catalog:v1";
+    // v1 cached inventory too. Never deserialize those entries as authoritative stock.
+    static final String KEY = "vmarket:catalog:metadata:v2";
     private static final Duration TTL = Duration.ofMinutes(5);
 
     private final StringRedisTemplate redis;
@@ -24,7 +25,7 @@ public class CatalogCache {
         this.metrics = metrics;
     }
 
-    public List<CatalogQueryService.ProductView> read() {
+    public List<CatalogQueryService.ProductMetadata> read() {
         try {
             var value = redis.opsForValue().get(KEY);
             if (value == null) {
@@ -39,7 +40,7 @@ public class CatalogCache {
         }
     }
 
-    public void write(List<CatalogQueryService.ProductView> products) {
+    public void write(List<CatalogQueryService.ProductMetadata> products) {
         try {
             redis.opsForValue().set(KEY, objectMapper.writeValueAsString(products), TTL);
         } catch (RuntimeException | JsonProcessingException exception) {

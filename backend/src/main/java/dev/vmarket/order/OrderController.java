@@ -26,12 +26,34 @@ public class OrderController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     OrderResult create(
-            @RequestHeader("Idempotency-Key") String idempotencyKey, @Valid @RequestBody CreateOrderRequest request) {
-        return orders.create(idempotencyKey, request);
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @RequestHeader(value = "X-Checkout-Session", required = false) String checkoutSession,
+            @Valid @RequestBody CreateOrderRequest request) {
+        return orders.create(checkoutSession, idempotencyKey, request);
     }
 
     @GetMapping("/{orderNumber}")
     TrackedOrder track(@PathVariable String orderNumber, @RequestParam String trackingToken) {
         return tracking.find(orderNumber, trackingToken);
+    }
+
+    @PostMapping("/checkout/cancel")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void closeUnused(
+            @RequestHeader("Idempotency-Key") String key,
+            @RequestHeader(value = "X-Checkout-Session", required = false) String guest) {
+        try {
+            orders.closeUnused(guest, key);
+        } catch (org.springframework.dao.CannotAcquireLockException busy) {
+            throw new IdempotencyConflictException(
+                    "The checkout is still active. Keep its key and check the result before trying to close it again.");
+        }
+    }
+
+    @GetMapping("/checkout")
+    OrderResult recover(
+            @RequestHeader("Idempotency-Key") String key,
+            @RequestHeader(value = "X-Checkout-Session", required = false) String guest) {
+        return orders.recover(guest, key);
     }
 }

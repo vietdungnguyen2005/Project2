@@ -13,4 +13,5 @@ record MigrationSummary(
         int appliedRows,
         int rejectedRows,
         int checkpointRow,
-        Instant createdAt) {}
+        Instant createdAt,
+        String importMode) {}

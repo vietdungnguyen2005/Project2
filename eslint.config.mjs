@@ -7,6 +7,8 @@ export default tseslint.config(
     ignores: [
       ".next/**",
       ".open-next/**",
+      ".wrangler/**",
+      "backend/target/**",
       "node_modules/**",
       "qa-artifacts/**",
       "cloudflare-env.d.ts",

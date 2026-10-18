@@ -1,10 +1,23 @@
 spring:
   application:
     name: v-market-backend
+  session:
+    timeout: 15m
+    jdbc:
+      initialize-schema: never
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/vmarket}
     username: ${SPRING_DATASOURCE_USERNAME:vmarket}
     password: ${SPRING_DATASOURCE_PASSWORD:vmarket}
+    hikari:
+      connection-timeout: 2000
+      validation-timeout: 1000
+      data-source-properties:
+        connectTimeout: 3
+        loginTimeout: 3
+        socketTimeout: 15
+        cancelSignalTimeout: 2
+        tcpKeepAlive: true
   data:
     redis:
       url: ${SPRING_DATA_REDIS_URL:redis://localhost:6380}
@@ -41,6 +54,9 @@ springdoc:
     enabled: ${SPRINGDOC_ENABLED:false}
 
 vmarket:
+  checkout-replay-key: ${CHECKOUT_REPLAY_KEY:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=}
+  import-worker:
+    enabled: ${IMPORT_WORKER_ENABLED:true}
   deployment-environment: ${DEPLOYMENT_ENVIRONMENT:local}
   bff-secret: ${BFF_SHARED_SECRET:local-bff-secret}
   ops-secret: ${VMARKET_OPS_SECRET:local-development-only}

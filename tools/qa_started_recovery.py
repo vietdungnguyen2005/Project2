@@ -6,7 +6,7 @@ import sys
 import time
 import uuid
 from pathlib import Path
-from playwright.sync_api import expect, sync_playwright
+from playwright.sync_api import expect, sync_playwright, TimeoutError as PlaywrightTimeoutError
 
 phase=sys.argv[1]
 base=os.environ.get("BASE_URL","http://127.0.0.1:13002")
@@ -50,9 +50,17 @@ with sync_playwright() as playwright:
           BEGIN IF NEW.movement_type='LEGACY_IMPORT' AND NEW.product_id=md5('qa-crash-51')::uuid
           THEN PERFORM pg_sleep(30); END IF; RETURN NEW; END; $$;
           CREATE TRIGGER qa_hold_started_import BEFORE INSERT ON inventory_movement FOR EACH ROW EXECUTE FUNCTION qa_hold_started_import();""")
-        csv="schema_version,sku,vendor_code,name,on_hand,price_minor,expected_stock_version\n"+"".join(
-            f"2,CRASH-{n:03d},NAMI,Recovered item,101,200,0\n" for n in range(1,52))
-        response=context.request.post(f"{base}/api/ops/imports",headers={"Content-Type":"text/csv","X-Source-Name":"started-crash-51.csv","X-Source-Encoding":"UTF-8","X-CSRF-TOKEN":csrf,"Prefer":"respond-async"},data=csv)
+        profile=context.request.post(f"{base}/api/ops/integration-profiles",headers={"X-CSRF-TOKEN":csrf},data={
+            "profileId":"qa-crash","version":1,"encoding":"UTF-8","vendorCode":"NAMI",
+            "mapping":{"sku":"SKU","name":"ProductName","on_hand":"AvailableQuantity"},"skuNormalization":"TRIM_UPPER"})
+        assert profile.status==201,profile.text()
+        active=context.request.patch(f"{base}/api/ops/integration-profiles/qa-crash/1",headers={"X-CSRF-TOKEN":csrf},data={"active":True})
+        assert active.status==200,active.text()
+        csv="SKU,ProductName,AvailableQuantity\n"+"".join(f"CRASH-{n:03d},Recovered item,101\n" for n in range(1,52))
+        preview=context.request.post(f"{base}/api/ops/onboarding/qa-crash/1/preview",headers={"Content-Type":"text/csv","X-CSRF-TOKEN":csrf},data=csv)
+        assert preview.status==200 and preview.json()["acceptedRows"]==51,preview.text()
+        response=context.request.post(f"{base}/api/ops/onboarding/qa-crash/1/confirm",headers={"Content-Type":"text/csv","X-Source-Name":"started-crash-51.csv","X-CSRF-TOKEN":csrf,
+            "X-Preview-Receipt":preview.json()["confirmationReceipt"]},data=csv)
         assert response.status==202,response.text()
         job=str(uuid.UUID(response.json()["id"]))
         deadline=time.monotonic()+20
@@ -65,9 +73,29 @@ with sync_playwright() as playwright:
         execution=sql(f"SELECT e.job_execution_id FROM batch_job_execution e JOIN batch_job_execution_params p ON p.job_execution_id=e.job_execution_id WHERE p.parameter_name='jobId' AND p.parameter_value='{job}' ORDER BY e.job_execution_id DESC LIMIT 1")
         assert sql(f"SELECT status FROM batch_job_execution WHERE job_execution_id={int(execution)}")=="STARTED"
         assert sql(f"SELECT COUNT(*) FROM inventory_movement WHERE reference_id='{job}'")=="50"
-        artifact.write_text(json.dumps({"jobId":job,"oldExecutionId":int(execution)}),encoding="utf-8")
+        # Real DB unavailability while a supplier chunk is STARTED. Bound only this observation,
+        # not the product's availability SLA; restore the disposable DB even on assertion failure.
+        container=os.environ["TEST_POSTGRES_CONTAINER"]
+        assert container.startswith("vmarket-auth-pg-")
+        subprocess.run(["docker","pause",container],check=True,capture_output=True,timeout=15)
+        unavailable_observed=False
+        outage_start=time.perf_counter()
+        try:
+            try:
+                context.request.get(f"{base}/api/ops/imports",timeout=1500)
+            except PlaywrightTimeoutError:
+                unavailable_observed=True
+            assert unavailable_observed,"Paused DB unexpectedly produced a completed status read"
+        finally:
+            subprocess.run(["docker","unpause",container],check=True,capture_output=True,timeout=15)
+        outage_ms=(time.perf_counter()-outage_start)*1000
+        assert sql(f"SELECT applied_rows FROM migration_job WHERE id='{job}'")=="50"
+        artifact.write_text(json.dumps({"jobId":job,"oldExecutionId":int(execution),"profileId":"qa-crash","profileVersion":1,
+            "committedBeforeCrash":50,"expectedRows":51,"databasePausedDuringStarted":True,
+            "statusReadExceededClient1500ms":unavailable_observed,"outageObservationMs":outage_ms}),encoding="utf-8")
         print("PASS: real worker is STARTED, 50 rows committed, second chunk held in disposable DB")
     elif phase=="resume":
+        recovery_start=time.perf_counter()
         proof=json.loads(artifact.read_text(encoding="utf-8"));job=str(uuid.UUID(proof["jobId"]))
         deadline=time.monotonic()+30
         while time.monotonic()<deadline:
@@ -83,6 +111,10 @@ with sync_playwright() as playwright:
         assert sql("SELECT COUNT(*) FROM inventory_stock s JOIN product p ON p.id=s.product_id WHERE p.sku LIKE 'CRASH-%' AND s.on_hand=101 AND s.version=1")=="51"
         assert sql(f"SELECT COUNT(*)||':'||COUNT(DISTINCT e.job_instance_id) FROM batch_job_execution e JOIN batch_job_execution_params p ON p.job_execution_id=e.job_execution_id WHERE p.parameter_name='jobId' AND p.parameter_value='{job}'")=="2:1"
         assert sql(f"SELECT recovery_count FROM import_work_item WHERE job_id='{job}'")=="1"
+        proof.update({"synthetic":True,"movementsAfterRecovery":51,"finalAppliedRows":51,"batchExecutions":2,"batchInstances":1,
+            "recoveryCount":1,"resumeObservationMs":(time.perf_counter()-recovery_start)*1000,
+            "limitations":"Lease expiry injected and orphaned test query terminated; not a natural lease/SLA measurement"})
+        artifact.write_text(json.dumps(proof,indent=2),encoding="utf-8")
         page.get_by_role("button",name="Refresh import runs",exact=True).click()
         article=page.locator("article").filter(has=page.get_by_role("heading",name="started-crash-51.csv",exact=True))
         expect(article.get_by_text("COMPLETED",exact=True)).to_be_visible(timeout=15000)

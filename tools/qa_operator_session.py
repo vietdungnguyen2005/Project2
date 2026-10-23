@@ -157,6 +157,8 @@ with sync_playwright() as playwright:
         assert failing.value.status==202,failing.value.text()
         failed=wait_for_job(context,failing.value.json()["id"])
         assert failed["status"]=="FAILED" and failed["appliedRows"]==0,failed
+        failed_article=page.locator("article").filter(has=page.get_by_role("heading",name="controlled-restart.csv",exact=True))
+        failed_article.get_by_role("button",name="Inspect run",exact=True).click()
         expect(page.get_by_role("button",name="Restart failed import",exact=True)).to_be_visible(timeout=15000)
         page.screenshot(path=str(artifacts/"failed-import-restart.png"),full_page=True)
         page.set_viewport_size({"width":390,"height":844})

@@ -76,8 +76,13 @@ try {
     Wait-QaHttp 'http://127.0.0.1:18082/actuator/health' $qaBackend
     python tools/qa_started_recovery.py resume
     if ($LASTEXITCODE -ne 0) { throw 'STARTED recovery proof failed' }
+    python tools/qa_supplier_onboarding.py
+    if ($LASTEXITCODE -ne 0) { throw 'Supplier onboarding browser acceptance failed' }
     python tools/qa_operator_session.py
     if ($LASTEXITCODE -ne 0) { throw 'Operator browser verification failed' }
+    $env:QA_ARTIFACT_DIR = Join-Path $qaOutput 'fixtures'
+    python tools/qa_playwright.py
+    if ($LASTEXITCODE -ne 0) { throw 'Fixture browser contracts failed' }
     # Separate phase: delay only the real Java response, after its checkout transaction commits.
     taskkill /PID $qaFrontend.Id /T /F | Out-Null
     $qaFrontend.WaitForExit()

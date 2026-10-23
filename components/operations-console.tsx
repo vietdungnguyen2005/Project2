@@ -3,6 +3,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ArrowLeft, CheckCircle2, DatabaseZap, FileUp, PackageCheck, RefreshCw } from "lucide-react";
 import { useMemo, useState } from "react";
+import { SupplierOnboarding } from "@/components/supplier-onboarding";
+import { ImportInspection } from "@/components/import-inspection";
 import {
   advanceFulfillment,
   loadInventorySnapshot,
@@ -10,7 +12,6 @@ import {
   loadOperationsOrders,
   loadReconciliations,
   importPollingInterval,
-  restartImport,
   runReconciliation,
   selectImportPayload,
   uploadLegacyCatalog,
@@ -52,8 +53,6 @@ export function OperationsConsole() {
     mutationFn: () => uploadLegacyCatalog(sourceName, encoding, selectImportPayload(encoding, csv, fileBytes)),
     onSuccess: rememberJob,
   });
-  const restart=useMutation({mutationFn:restartImport,onSuccess:rememberJob,
-    onError:async()=>queryClient.invalidateQueries({queryKey:["migration-jobs"]})});
   const reconcile = useMutation({
     // Reconciliation scope is returned by the backend, never inferred from zero mismatches.
     mutationFn: runReconciliation,
@@ -129,6 +128,8 @@ export function OperationsConsole() {
             <p>{connectionError instanceof Error ? connectionError.message : "Backend unavailable."} No operational data is fabricated.</p>
           </div>
         ) : null}
+
+        <SupplierOnboarding onImported={rememberJob} />
 
         <section aria-labelledby="orders-heading" className="mt-8 border border-white/15 bg-[#111715] p-5 sm:p-6">
           <div className="flex flex-wrap items-end justify-between gap-4 border-b border-white/15 pb-4">
@@ -244,15 +245,14 @@ export function OperationsConsole() {
                       <p className="mt-1 font-mono text-xs text-[#718278]">checkpoint {job.checkpointRow} · applied {job.appliedRows} · rejected {job.rejectedRows}</p>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                    {job.status==="FAILED" ? <button type="button" disabled={restart.isPending} onClick={()=>restart.mutate(job.id)} className="min-h-11 border border-amber-400/50 px-4 text-xs font-black uppercase tracking-wider text-amber-200 hover:bg-amber-400/10 disabled:opacity-40">{restart.isPending && restart.variables===job.id ? "Queueing…" : "Restart failed import"}</button> : null}
                     <button type="button" disabled={reconcile.isPending || job.appliedRows === 0 || job.status==="STAGED" || job.status==="RUNNING"} onClick={() => reconcile.mutate(job.id)} className="min-h-11 border border-[#2de1c2]/50 px-4 text-xs font-black uppercase tracking-wider text-[#7ef5df] hover:bg-[#2de1c2]/10 disabled:opacity-40">
                       Reconcile
                     </button>
                     </div>
+                    <ImportInspection jobId={job.id} onUpdated={rememberJob} />
                   </article>
                 )) : <p className="py-8 text-center text-sm text-[#718278]">No migration run recorded.</p>}
               </div>
-              {restart.error ? <p role="alert" className="mt-3 text-sm text-rose-300">{restart.error.message} Refresh the job status before retrying; the restart may already have been queued.</p> : null}
             </section>
 
             <section aria-labelledby="reconciliation-heading" className="border border-white/15 bg-[#111715] p-5 sm:p-6">

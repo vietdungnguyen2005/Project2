@@ -1,0 +1,15 @@
+{
+  "synthetic": true,
+  "realBackend": true,
+  "dryRunUnchanged": true,
+  "acceptedRows": 1,
+  "rejectedRows": 1,
+  "duplicateJobs": 1,
+  "movementsAfterDuplicate": 1,
+  "mismatches": 0,
+  "stockNotVerifiedRows": 0,
+  "cp932Decoded": true,
+  "authorizationAndCsrf": true,
+  "mobileOverflow": false,
+  "reportExcludedPayloadAndReceipt": true
+}

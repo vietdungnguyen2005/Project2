@@ -44,6 +44,21 @@ def install_api_contract(page):
     page.route("**/api/orders", lambda route: route.fulfill(status=201, json=order))
     page.route("**/api/orders/*?*", lambda route: route.fulfill(json=tracked_order))
     page.route("**/api/ops/imports", lambda route: route.fulfill(json=[]))
+    page.route("**/api/ops/integration-profiles", lambda route: route.fulfill(json=[{
+        "profileId":"supplier-b","version":1,"encoding":"UTF-8","vendorCode":"RIVERBYTE","active":True,
+        "mapping":{"sku":"SKU","name":"ProductName","on_hand":"AvailableQuantity"},"skuNormalization":"TRIM_UPPER"
+    }]))
+    page.route("**/api/ops/onboarding/supplier-b/1/preview",lambda route: route.fulfill(json={
+        "profileId":"supplier-b","version":1,"encoding":"UTF-8",
+        "mapping":{"sku":"SKU","name":"ProductName","on_hand":"AvailableQuantity"},
+        "acceptedRows":1,"rejectedRows":1,"sample":[{"rowNumber":2,"sku":"VM-002","name":"Modular desk","onHand":60}],
+        "errors":[{"rowNumber":3,"reason":"on_hand must be an integer between 0 and 1000000"}],"confirmationReceipt":"fixture-receipt"
+    }))
+    page.route("**/api/ops/onboarding/supplier-b/1/confirm",lambda route: route.fulfill(status=202,json={
+        "id":"fixture-supplier-job","status":"STAGED","profileId":"supplier-b","profileVersion":1,
+        "sourceName":"fixture-supplier.csv","encoding":"UTF-8","totalRows":2,"validRows":1,"appliedRows":0,
+        "rejectedRows":1,"checkpointRow":0,"createdAt":"2026-10-23T00:00:00Z","importMode":"VERSIONED_STOCK"
+    }))
     page.route("**/api/ops/reconciliations", lambda route: route.fulfill(json=[]))
     page.route("**/api/ops/orders", lambda route: route.fulfill(json=[{
         "orderNumber": order["orderNumber"], "paymentStatus": "PENDING", "fulfillmentStatus": "RECEIVED",
@@ -109,6 +124,22 @@ with sync_playwright() as playwright:
     expect(operations.get_by_role("heading", name="OPERATIONS LEDGER")).to_be_visible()
     expect(operations.get_by_text("VM-EVIDENCE001")).to_be_visible()
     assert_no_overflow(operations)
+    supplier=operations.locator('section[aria-labelledby="supplier-heading"]')
+    operations.get_by_role("button",name="Preview & validate",exact=True).click()
+    expect(supplier.get_by_text("1 accepted · 1 rejected",exact=True)).to_be_visible()
+    expect(supplier.get_by_role("button",name="Confirm & queue",exact=True)).to_be_disabled()
+    supplier.get_by_role("checkbox").check()
+    expect(supplier.get_by_role("button",name="Confirm & queue",exact=True)).to_be_enabled()
+    # Editing invalidates the approval instead of silently confirming a different payload.
+    operations.get_by_label("Supplier CSV payload (UTF-8 only)",exact=True).fill("changed")
+    expect(supplier.get_by_role("button",name="Confirm & queue",exact=True)).not_to_be_visible()
+    operations.get_by_role("button",name="Preview & validate",exact=True).click()
+    supplier.get_by_role("checkbox").check()
+    supplier.get_by_role("button",name="Confirm & queue",exact=True).click()
+    expect(supplier.get_by_text("Acknowledged job fixture-supplier-job",exact=False)).to_be_visible()
+    operations.set_viewport_size({"width":390,"height":844})
+    assert_no_overflow(operations)
+    operations.set_viewport_size({"width":1440,"height":1000})
     operations.screenshot(path=str(artifacts / "operations-ledger.png"), full_page=True)
 
     tracking = browser.new_page(viewport={"width": 1200, "height": 900})

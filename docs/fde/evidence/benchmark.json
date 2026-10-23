@@ -1,0 +1,18 @@
+{
+  "seed" : 20261023,
+  "synthetic" : true,
+  "rows" : 220,
+  "validRows" : 200,
+  "rejectedRows" : 20,
+  "sourceSha256" : "4bef1892bf589183b8e9b55faba7a2d821d3765b17523317dd5ae546f2eb7e0f",
+  "previewMs" : 51.07,
+  "previewThroughImportMs" : 1195.953,
+  "endToEndThroughReconciliationMs" : 1582.4435,
+  "acceptedRowsPerSecondThroughImport" : 167.23065204067385,
+  "jobsAfterDuplicate" : 1,
+  "movementsAfterDuplicate" : 200,
+  "mismatches" : 0,
+  "unverifiedStockRows" : 0,
+  "environment" : "Windows 11 / Java 21 / PG17.6 Redis8.2 Testcontainers",
+  "measuredAt" : "2026-10-23T17:05:56.197660700Z"
+}

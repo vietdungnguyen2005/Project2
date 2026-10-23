@@ -37,7 +37,7 @@ public class ImportChunkService {
                 .single();
         work.requireOwner(claim);
         var rows = jdbc.sql("""
-                SELECT row_number, external_sku, product_name, vendor_code, on_hand, price_minor, expected_stock_version
+                SELECT row_number, external_sku, product_name, vendor_code, on_hand, price_minor, expected_stock_version, expected_product_version
                 FROM staged_import_row
                 WHERE job_id=:jobId AND valid=TRUE AND applied_at IS NULL
                 ORDER BY external_sku, row_number LIMIT :limit FOR UPDATE
@@ -68,6 +68,9 @@ public class ImportChunkService {
             if (product == null) error = "UNKNOWN_SKU: SKU does not exist in the canonical catalog";
             else if (!product.vendorCode().equals(row.vendorCode()))
                 error = "VENDOR_MISMATCH: vendor does not match the canonical product";
+            else if (row.expectedProductVersion() != null
+                    && !Long.valueOf(product.productVersion()).equals(row.expectedProductVersion()))
+                error = "STALE_PRODUCT_VERSION: canonical metadata changed since supplier preview";
             else if ("VERSIONED_STOCK".equals(mode)
                     && !Long.valueOf(product.stockVersion()).equals(row.expectedStockVersion()))
                 error = "STALE_STOCK_VERSION: inventory changed since this snapshot";
@@ -135,7 +138,7 @@ public class ImportChunkService {
 
     private ProductState findProduct(String sku) {
         return jdbc.sql("""
-                SELECT p.id,v.code AS vendor_code,s.on_hand,s.reserved,s.version AS stock_version
+                SELECT p.id,v.code AS vendor_code,s.on_hand,s.reserved,s.version AS stock_version,p.version AS product_version
                 FROM product p JOIN vendor v ON v.id=p.vendor_id JOIN inventory_stock s ON s.product_id=p.id
                 WHERE p.sku=:sku FOR UPDATE OF p,s
                 """)
@@ -188,7 +191,9 @@ public class ImportChunkService {
             String vendorCode,
             int onHand,
             int priceMinor,
-            Long expectedStockVersion) {}
+            Long expectedStockVersion,
+            Long expectedProductVersion) {}
 
-    private record ProductState(UUID id, String vendorCode, int onHand, int reserved, long stockVersion) {}
+    private record ProductState(
+            UUID id, String vendorCode, int onHand, int reserved, long stockVersion, long productVersion) {}
 }

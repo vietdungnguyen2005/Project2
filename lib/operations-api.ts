@@ -12,7 +12,46 @@ export type MigrationSummary = {
   checkpointRow: number;
   createdAt: string;
   importMode?: "METADATA_ONLY" | "VERSIONED_STOCK" | "LEGACY_UNVERIFIED";
+  profileId?: string | null;
+  profileVersion?: number | null;
 };
+
+export type IntegrationProfile = {
+  profileId: string; version: number; encoding: "UTF-8" | "CP932"; vendorCode: string;
+  mapping: { sku: string; name: string; on_hand: string }; skuNormalization: "TRIM" | "TRIM_UPPER";
+  active: boolean; createdBy: string; createdAt: string; updatedBy: string; updatedAt: string;
+};
+export type ValidationError = { rowNumber: number; reason: string };
+export type SupplierPreview = {
+  profileId: string; version: number; encoding: string; mapping: IntegrationProfile["mapping"];
+  acceptedRows: number; rejectedRows: number;
+  sample: Array<{ rowNumber: number; sku: string; name: string; onHand: number }>;
+  errors: ValidationError[]; confirmationReceipt: string;
+};
+export type ImportInspection = {
+  job: MigrationSummary; workState: "READY" | "CLAIMED" | "FINISHED" | "FAILED" | "BLOCKED";
+  recoveryCount: number; lastRecoveryReason: string | null; restartAllowed: boolean; errors: ValidationError[];
+};
+
+export async function loadIntegrationProfiles(signal?: AbortSignal): Promise<IntegrationProfile[]> {
+  return readOrThrow(await operatorFetch("/api/ops/integration-profiles", { signal }));
+}
+function onboardingPath(id: string, version: number, action: "preview" | "confirm"): string {
+  return `/api/ops/onboarding/${encodeURIComponent(id)}/${version}/${action}`;
+}
+export async function previewSupplier(id: string, version: number, csv: string | ArrayBuffer): Promise<SupplierPreview> {
+  return readOrThrow(await operatorFetch(onboardingPath(id,version,"preview"), {
+    method:"POST",headers:{"Content-Type":"text/csv"},body:csv,
+  }));
+}
+export async function confirmSupplier(id: string, version: number, sourceName: string, csv: string | ArrayBuffer, receipt: string): Promise<MigrationSummary> {
+  return readOrThrow(await operatorFetch(onboardingPath(id,version,"confirm"), {
+    method:"POST",headers:{"Content-Type":"text/csv","X-Source-Name":sourceName,"X-Preview-Receipt":receipt},body:csv,
+  }));
+}
+export async function inspectImport(jobId: string, signal?: AbortSignal): Promise<ImportInspection> {
+  return readOrThrow(await operatorFetch(`/api/ops/imports/${encodeURIComponent(jobId)}/inspection`,{signal}));
+}
 
 export type Discrepancy = {
   id: string;

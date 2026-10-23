@@ -73,4 +73,11 @@ public class MigrationController {
         authorizer.authorize(secret);
         return imports.find(jobId);
     }
+
+    @GetMapping("/{jobId}/inspection")
+    LegacyImportService.Inspection inspect(
+            @RequestHeader("X-V-Market-Ops-Secret") String secret, @PathVariable UUID jobId) {
+        authorizer.authorize(secret);
+        return imports.inspect(jobId);
+    }
 }

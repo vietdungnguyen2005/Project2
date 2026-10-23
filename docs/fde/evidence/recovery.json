@@ -1,0 +1,19 @@
+{
+  "jobId": "55162356-176e-4dd4-836e-dae7f6291623",
+  "oldExecutionId": 2,
+  "profileId": "qa-crash",
+  "profileVersion": 1,
+  "committedBeforeCrash": 50,
+  "expectedRows": 51,
+  "databasePausedDuringStarted": true,
+  "statusReadExceededClient1500ms": true,
+  "outageObservationMs": 1660.6992000015453,
+  "synthetic": true,
+  "movementsAfterRecovery": 51,
+  "finalAppliedRows": 51,
+  "batchExecutions": 2,
+  "batchInstances": 1,
+  "recoveryCount": 1,
+  "resumeObservationMs": 1481.7366999923252,
+  "limitations": "Lease expiry injected and orphaned test query terminated; not a natural lease/SLA measurement"
+}

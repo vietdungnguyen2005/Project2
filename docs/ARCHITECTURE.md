@@ -62,6 +62,14 @@ These budgets do not cover time before handler invocation, synchronous event-loo
 
 Guest checkout intentionally supports invoice and cash-on-delivery only; no fake card processor is presented. Tracking responses exclude name, email, and address. Ops service credentials live only in the Next.js server environment and do not grant user access: operations also require a current OPERATOR account and JDBC session, plus CSRF on mutations. Production startup rejects short or known development secrets. Logs correlate by request ID and application audit details contain business identifiers, not customer PII.
 
+## Supplier onboarding extension (V14, local only)
+
+Immutable declarative integration profiles add strict supplier header mapping and a read-only preview before explicit confirmation. Preview reads canonical price/vendor and product/stock versions in one bounded query; a short-lived HMAC receipt binds approval to the operator, profile/version, original bytes and enrichment. New staging rechecks activation/freshness, records profile provenance/audit in the same job/work transaction, and preserves the existing global raw-byte checksum namespace. Different profiles/versions over identical bytes conflict, rather than replaying business effects.
+
+The original parser, queue, Batch instance, chunk transactions, fencing, recovery and reconciliation are reused. Supplier rows additionally compare expected product version under the existing product/stock locks. Invalid text cells are not persisted for quarantined rows. Existing single-store OPERATOR/session/CSRF/trust boundaries remain; no tenancy, alternate queue or arbitrary scripts were added. A reviewed three-column file still needs operator assurance of business freshness; versions protect changes after review, not source age before it.
+
+See [customer architecture and trade-offs](fde/customer-problem.md), [contract](fde/integration-contract.md), [traceability](fde/acceptance-criteria.md), and [rollback/recovery decisions](fde/operator-handoff.md). The feature has not been pushed/deployed; local Worker build is not hosting evidence.
+
 ## Evolution path
 
 The same container can later run on AWS ECS/EKS. Terraform can be added when an AWS account exists, mapping PostgreSQL to RDS, Redis to ElastiCache, OTLP to the selected observability backend, and secrets to Secrets Manager. Deferring those resources avoids fake IaC that has never been applied.

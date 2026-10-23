@@ -33,13 +33,19 @@ public class LegacyImportService {
     private final TransactionTemplate transactions;
     private final ImportJobRunner runner;
     private final ImportWorkService work;
+    private final IntegrationProfileService profiles;
 
     public LegacyImportService(
-            JdbcClient jdbc, TransactionTemplate transactions, ImportJobRunner runner, ImportWorkService work) {
+            JdbcClient jdbc,
+            TransactionTemplate transactions,
+            ImportJobRunner runner,
+            ImportWorkService work,
+            IntegrationProfileService profiles) {
         this.jdbc = jdbc;
         this.transactions = transactions;
         this.runner = runner;
         this.work = work;
+        this.profiles = profiles;
     }
 
     public MigrationSummary importCsv(String sourceName, String encodingName, byte[] bytes) {
@@ -56,12 +62,30 @@ public class LegacyImportService {
 
         Charset charset = supportedCharset(encodingName);
         String checksum = sha256(bytes);
-        var existing = findByChecksum(checksum, charset);
+        var existing = findByChecksum(checksum, charset, null, null);
         if (existing != null) {
             return existing;
         }
 
         List<StagedRow> rows = parse(bytes, charset);
+        return stagePrepared(sourceName, checksum, charset, rows, asynchronous, null, null, null);
+    }
+
+    MigrationSummary duplicate(byte[] bytes, String encoding, String profileId, Integer profileVersion) {
+        return findByChecksum(sha256(bytes), supportedCharset(encoding), profileId, profileVersion);
+    }
+
+    MigrationSummary stagePrepared(
+            String sourceName,
+            String checksum,
+            Charset charset,
+            List<StagedRow> rows,
+            boolean asynchronous,
+            String profileId,
+            Integer profileVersion,
+            String actor) {
+        if (sourceName == null || sourceName.isBlank() || sourceName.length() > 160)
+            throw new InvalidImportException("A valid X-Source-Name header is required.");
         UUID jobId = UUID.randomUUID();
         var staged = transactions.execute(status -> {
             // Serialize the lookup+insert race; a hash collision only reduces concurrency.
@@ -69,9 +93,23 @@ public class LegacyImportService {
                     .param("key", "import-file:" + checksum)
                     .query((rs, row) -> true)
                     .single();
-            var concurrent = findByChecksum(checksum, charset);
+            var concurrent = findByChecksum(checksum, charset, profileId, profileVersion);
             if (concurrent != null) return concurrent;
+            if (profileId != null) profiles.requireActive(profileId, profileVersion, true);
             stage(jobId, sourceName.trim(), checksum, charset.name(), rows);
+            if (profileId != null) {
+                jdbc.sql("UPDATE migration_job SET profile_id=:profile,profile_version=:version WHERE id=:job")
+                        .param("profile", profileId)
+                        .param("version", profileVersion)
+                        .param("job", jobId)
+                        .update();
+                profiles.audit(
+                        profileId,
+                        profileVersion,
+                        actor,
+                        "SUPPLIER_IMPORT_CONFIRMED",
+                        java.util.Map.of("jobId", jobId.toString()));
+            }
             if (asynchronous)
                 jdbc.sql("UPDATE import_work_item SET dispatch_requested=TRUE WHERE job_id=:job")
                         .param("job", jobId)
@@ -134,7 +172,7 @@ public class LegacyImportService {
     public MigrationSummary find(UUID jobId) {
         return jdbc.sql("""
                         SELECT id, source_name, encoding, status, total_rows, valid_rows,
-                               applied_rows, rejected_rows, checkpoint_row, created_at, import_mode
+                               applied_rows, rejected_rows, checkpoint_row, created_at, import_mode, profile_id, profile_version
                         FROM migration_job WHERE id = :id
                         """)
                 .param("id", jobId)
@@ -146,15 +184,43 @@ public class LegacyImportService {
     public List<MigrationSummary> recent() {
         return jdbc.sql("""
                         SELECT id, source_name, encoding, status, total_rows, valid_rows,
-                               applied_rows, rejected_rows, checkpoint_row, created_at, import_mode
+                               applied_rows, rejected_rows, checkpoint_row, created_at, import_mode, profile_id, profile_version
                         FROM migration_job ORDER BY created_at DESC LIMIT 20
                         """).query(MigrationSummary.class).list();
     }
 
-    private MigrationSummary findByChecksum(String checksum, Charset charset) {
+    public record Inspection(
+            MigrationSummary job,
+            String workState,
+            int recoveryCount,
+            String lastRecoveryReason,
+            boolean restartAllowed,
+            List<SupplierOnboardingService.RowError> errors) {}
+
+    public Inspection inspect(UUID jobId) {
+        var job = find(jobId);
+        return jdbc.sql("SELECT state,recovery_count,last_recovery_reason FROM import_work_item WHERE job_id=:job")
+                .param("job", jobId)
+                .query((rs, index) -> new Inspection(
+                        job,
+                        rs.getString("state"),
+                        rs.getInt("recovery_count"),
+                        rs.getString("last_recovery_reason"),
+                        job.status().equals("FAILED") && rs.getString("state").equals("FAILED"),
+                        jdbc.sql(
+                                        "SELECT row_number,validation_error FROM staged_import_row WHERE job_id=:job AND valid=FALSE ORDER BY row_number LIMIT 1000")
+                                .param("job", jobId)
+                                .query((row, n) -> new SupplierOnboardingService.RowError(
+                                        row.getInt("row_number"), row.getString("validation_error")))
+                                .list()))
+                .single();
+    }
+
+    private MigrationSummary findByChecksum(
+            String checksum, Charset charset, String profileId, Integer profileVersion) {
         var existing = jdbc.sql("""
                         SELECT id, source_name, encoding, status, total_rows, valid_rows,
-                               applied_rows, rejected_rows, checkpoint_row, created_at, import_mode
+                               applied_rows, rejected_rows, checkpoint_row, created_at, import_mode, profile_id, profile_version
                         FROM migration_job WHERE file_checksum = :checksum
                         """)
                 .param("checksum", checksum)
@@ -164,6 +230,11 @@ public class LegacyImportService {
         if (existing != null && !supportedCharset(existing.encoding()).equals(charset))
             throw new ImportConflictException(
                     "These file bytes already belong to an import with a different declared encoding. Review the existing job before submitting another operation.");
+        if (existing != null
+                && (!java.util.Objects.equals(existing.profileId(), profileId)
+                        || !java.util.Objects.equals(existing.profileVersion(), profileVersion)))
+            throw new ImportConflictException(
+                    "These original file bytes already belong to a different profile/version (or legacy import). Review the existing job; remapping cannot replay its business effects.");
         return existing;
     }
 
@@ -195,21 +266,23 @@ public class LegacyImportService {
             jdbc.sql("""
                             INSERT INTO staged_import_row (
                                 job_id, row_number, external_sku, product_name, vendor_code,
-                                on_hand, price_minor, valid, validation_error, expected_stock_version
+                                on_hand, price_minor, valid, validation_error, expected_stock_version, expected_product_version
                             ) VALUES (
                                 :jobId, :rowNumber, :sku, :name, :vendorCode,
-                                :onHand, :price, :valid, :error, :stockVersion
+                                :onHand, :price, :valid, :error, :stockVersion, :productVersion
                             )
                             """)
                     .param("jobId", jobId)
                     .param("rowNumber", row.rowNumber())
-                    .param("sku", row.sku())
-                    .param("name", row.name())
-                    .param("vendorCode", row.vendorCode())
+                    // Rejected cells are not needed for execution and must not overflow staging columns.
+                    .param("sku", row.valid() ? row.sku() : null)
+                    .param("name", row.valid() ? row.name() : null)
+                    .param("vendorCode", row.valid() ? row.vendorCode() : null)
                     .param("onHand", row.onHand())
                     .param("price", row.priceMinor())
                     .param("valid", row.valid())
                     .param("error", row.error())
+                    .param("productVersion", row.expectedProductVersion())
                     .param(
                             "stockVersion",
                             row.expectedStockVersion() != null && row.expectedStockVersion() >= 0
@@ -219,7 +292,11 @@ public class LegacyImportService {
         }
     }
 
-    private List<StagedRow> parse(byte[] bytes, Charset charset) {
+    List<StagedRow> parse(byte[] bytes, Charset charset) {
+        return parse(bytes, charset, true);
+    }
+
+    List<StagedRow> parse(byte[] bytes, Charset charset, boolean normalizeSku) {
         var rows = new ArrayList<StagedRow>();
         try (var reader = new InputStreamReader(
                         new ByteArrayInputStream(bytes),
@@ -251,7 +328,8 @@ public class LegacyImportService {
                 if (!record.isConsistent())
                     throw new InvalidImportException(
                             "CSV row " + rowNumber + " must have the same number of fields as its header.");
-                String sku = record.get("sku").trim().toUpperCase(Locale.ROOT);
+                String sku = record.get("sku").trim();
+                if (normalizeSku) sku = sku.toUpperCase(Locale.ROOT);
                 String vendorCode = record.get("vendor_code").trim().toUpperCase(Locale.ROOT);
                 String name = record.get("name").trim();
                 Integer onHand = parseInteger(record.get("on_hand"));
@@ -275,6 +353,7 @@ public class LegacyImportService {
                         price,
                         versioned,
                         stockVersion,
+                        null, // Supplier-only enrichment is attached by the onboarding adapter, not a legacy column.
                         errors.isEmpty(),
                         errors.isEmpty() ? null : String.join("; ", errors)));
             });
@@ -301,6 +380,7 @@ public class LegacyImportService {
                                 row.priceMinor(),
                                 row.versioned(),
                                 row.expectedStockVersion(),
+                                row.expectedProductVersion(),
                                 false,
                                 row.error() == null
                                         ? "DUPLICATE_SKU: every occurrence is quarantined"
@@ -325,7 +405,7 @@ public class LegacyImportService {
         }
     }
 
-    private static Charset supportedCharset(String name) {
+    static Charset supportedCharset(String name) {
         if (name == null) throw new InvalidImportException("X-Source-Encoding is required.");
         return switch (name.trim().toUpperCase(Locale.ROOT)) {
             case "UTF-8", "UTF8" -> StandardCharsets.UTF_8;
@@ -334,7 +414,7 @@ public class LegacyImportService {
         };
     }
 
-    private static String sha256(byte[] bytes) {
+    static String sha256(byte[] bytes) {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
         } catch (NoSuchAlgorithmException exception) {
@@ -342,7 +422,7 @@ public class LegacyImportService {
         }
     }
 
-    private record StagedRow(
+    record StagedRow(
             int rowNumber,
             String sku,
             String vendorCode,
@@ -351,6 +431,7 @@ public class LegacyImportService {
             Integer priceMinor,
             boolean versioned,
             Long expectedStockVersion,
+            Long expectedProductVersion,
             boolean valid,
             String error) {}
 }

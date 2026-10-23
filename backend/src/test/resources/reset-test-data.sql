@@ -1,4 +1,5 @@
 TRUNCATE TABLE
+    integration_profile,
     closed_checkout_intent,
     spring_session_attributes,
     spring_session,
@@ -13,6 +14,11 @@ TRUNCATE TABLE
     customer_order,
     audit_event
 CASCADE;
+
+INSERT INTO integration_profile(profile_id,version,encoding,vendor_code,mapping,sku_normalization,active,created_by,updated_by)
+VALUES
+('supplier-a',1,'CP932','NAMI','{"sku":"商品コード","name":"商品名","on_hand":"在庫数"}','TRIM_UPPER',TRUE,'migration:synthetic-demo','migration:synthetic-demo'),
+('supplier-b',1,'UTF-8','RIVERBYTE','{"sku":"SKU","name":"ProductName","on_hand":"AvailableQuantity"}','TRIM_UPPER',TRUE,'migration:synthetic-demo','migration:synthetic-demo');
 
 UPDATE product SET
     name = CASE sku

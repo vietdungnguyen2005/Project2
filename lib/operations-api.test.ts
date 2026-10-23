@@ -2,6 +2,29 @@ import { describe, expect, it, vi } from "vitest";
 import { advanceFulfillment, loadOperationsOrders, loadInventorySnapshot, restartImport, selectImportPayload, uploadLegacyCatalog, importPollingInterval } from "@/lib/operations-api";
 
 describe("operations API", () => {
+  it("previews supplier bytes without staging", async () => {
+    const upstream=vi.fn().mockResolvedValueOnce(Response.json({authenticated:true,csrfToken:"csrf",roles:["ROLE_OPERATOR"]}))
+      .mockResolvedValueOnce(Response.json({acceptedRows:1,rejectedRows:0,confirmationReceipt:"receipt-1"}));
+    vi.stubGlobal("fetch",upstream);
+    const api=await import("@/lib/operations-api");
+    await expect(api.previewSupplier("supplier-b",1,"csv")).resolves.toMatchObject({confirmationReceipt:"receipt-1"});
+    expect(upstream.mock.calls[1][0]).toBe("/api/ops/onboarding/supplier-b/1/preview");
+    expect(upstream.mock.calls[1][1]).toMatchObject({method:"POST",body:"csv"});
+  });
+  it("passes the explicit preview receipt and original bytes to confirmation without exposing ops secrets", async () => {
+    const upstream=vi.fn().mockResolvedValueOnce(Response.json({authenticated:true,csrfToken:"csrf",roles:["ROLE_OPERATOR"]}))
+      .mockResolvedValueOnce(Response.json({id:"supplier-job",status:"STAGED"},{status:202}));
+    vi.stubGlobal("fetch",upstream);
+    const {confirmSupplier}=await import("@/lib/operations-api");
+    const bytes=new Uint8Array([0x93,0xfa]).buffer;
+    await expect(confirmSupplier("supplier-a",1,"supplier.csv",bytes,"receipt")).resolves.toMatchObject({status:"STAGED"});
+    const request=upstream.mock.calls[1][1];
+    expect(request.body).toBe(bytes);
+    const headers=new Headers(request.headers);
+    expect(headers.get("X-Preview-Receipt")).toBe("receipt");
+    expect(headers.get("X-CSRF-TOKEN")).toBe("csrf");
+    expect(headers.has("X-V-Market-Ops-Secret")).toBe(false);
+  });
   it("polls active work only and stops automatic polling after a status-read error", () => {
     expect(importPollingInterval([{status:"STAGED"}],false)).toBe(2000);
     expect(importPollingInterval([{status:"RUNNING"}],false)).toBe(2000);

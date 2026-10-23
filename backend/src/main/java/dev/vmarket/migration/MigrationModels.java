@@ -14,4 +14,6 @@ record MigrationSummary(
         int rejectedRows,
         int checkpointRow,
         Instant createdAt,
-        String importMode) {}
+        String importMode,
+        String profileId,
+        Integer profileVersion) {}

@@ -21,6 +21,7 @@ These describe the current locally verified source. The live demo/deployment evi
 - Random 256-bit tracking capabilities, hashed lookup and encrypted 24-hour replay copies; tracking responses exclude customer PII.
 - Audited, one-step fulfillment transitions in an operations console.
 - Strict UTF-8/CP932 CSV intake, bounded staging, quarantine, checksum deduplication, async dispatch and bounded abandoned-execution recovery with business/Batch metadata fencing (local remediation; see evidence for rollout status).
+- Versioned supplier contracts, read-only mapping preview and explicit confirmation in the existing ops ledger, with global original-byte dedup and stock/product-version guards. See the [synthetic supplier onboarding case](docs/fde/customer-problem.md), [acceptance evidence](docs/fde/acceptance-criteria.md), and [demo/handoff](docs/fde/customer-demo-script.md). This feature is local, not deployed.
 - Redis metadata cache-aside with TTL, after-commit invalidation, fail-open fallback and metrics; stock/active eligibility read from PostgreSQL on every catalog request.
 - BFF trust boundary: browser requests never receive the backend or operations secrets.
 - Prometheus metrics, health probes, Micrometer tracing/OTLP support, and request correlation IDs.
@@ -73,6 +74,8 @@ pwsh -NoProfile -File tools/verify-operator-session.ps1
 This uses disposable local databases and temporary QA credentials, not production data. Changes described here are local until a coordinated backend/frontend deployment; see [remediation evidence](docs/evidence/remediation-2026-10-18.md).
 
 ## Stock import contract (local remediation)
+
+The supplier onboarding extension is a separate reviewed entry point over the **same** importer: it enriches three-column supplier files from the catalog **at preview**, requires signed explicit confirmation and preserves the original file checksum. It does not prove the source file's business freshness before review. The direct legacy/snapshot contracts below remain supported. See [integration contract](docs/fde/integration-contract.md).
 
 Five-column legacy files (`sku,vendor_code,name,on_hand,price_minor`) update **names/prices only**. Their `on_hand` values do not write inventory or generate stock movements. The result reports `importMode=METADATA_ONLY`; stock reconciliation is explicitly unverified.
 

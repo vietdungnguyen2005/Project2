@@ -38,6 +38,590 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @Sql(scripts = "/reset-test-data.sql", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
 class VMarketApplicationTest {
     @Test
+    void supplierEnrichmentDoesNotChangeLegacyUnknownColumnCompatibility() {
+        applicationContext
+                .getBean(dev.vmarket.migration.LegacyImportService.class)
+                .importCsv(
+                        "extra.csv",
+                        "UTF-8",
+                        "sku,vendor_code,name,on_hand,price_minor,expected_product_version\nVM-001,NAMI,Legacy jacket,32,11000,-1\n"
+                                .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        assertThat(jdbc.sql("SELECT applied_rows FROM migration_job")
+                        .query(Integer.class)
+                        .single())
+                .isEqualTo(1);
+    }
+
+    @Test
+    void supplierProfileMigrationPreservesLegacyHistoryAndMakesDefinitionsImmutable() {
+        var configuration = org.flywaydb.core.Flyway.configure()
+                .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .schemas("supplier_upgrade")
+                .defaultSchema("supplier_upgrade");
+        configuration.target("13").load().migrate();
+        jdbc.sql("""
+                INSERT INTO supplier_upgrade.migration_job(id,source_name,file_checksum,encoding,status)
+                VALUES('00000000-0000-0000-0000-000000000914','retained.csv',repeat('e',64),'UTF-8','COMPLETED')
+                """).update();
+        jdbc.sql("UPDATE supplier_upgrade.inventory_stock SET on_hand=25,version=9")
+                .update();
+        configuration.target("14").load().migrate();
+        assertThat(jdbc.sql(
+                                "SELECT COUNT(*) FROM supplier_upgrade.migration_job WHERE profile_id IS NULL AND profile_version IS NULL AND source_name='retained.csv'")
+                        .query(Integer.class)
+                        .single())
+                .isEqualTo(1);
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM supplier_upgrade.inventory_stock WHERE on_hand=25 AND version=9")
+                        .query(Integer.class)
+                        .single())
+                .isEqualTo(8);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> jdbc.sql(
+                                "UPDATE supplier_upgrade.integration_profile SET encoding='UTF-8' WHERE profile_id='supplier-a'")
+                        .update())
+                .isInstanceOf(org.springframework.dao.DataAccessException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                        () -> jdbc.sql("DELETE FROM supplier_upgrade.integration_profile WHERE profile_id='supplier-a'")
+                                .update())
+                .isInstanceOf(org.springframework.dao.DataAccessException.class);
+    }
+
+    @Test
+    void profilesExposeRequiredFieldsAndApprovedTypeRangePolicy() throws Exception {
+        mockMvc.perform(get("/api/ops/integration-profiles")
+                        .with(operatorRequest())
+                        .header("X-V-Market-BFF-Secret", "local-bff-secret")
+                        .header("X-V-Market-Ops-Secret", "local-development-only"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].requiredFields[0]").value("sku"))
+                .andExpect(jsonPath("$[0].validation.on_hand.max").value(1000000))
+                .andExpect(jsonPath("$[0].normalization.name").value("TRIM"));
+    }
+
+    @Test
+    void onboardingPreservesOperatorCsrfAndOpsSecretBoundariesAndBlocksUnsafeRestarts() throws Exception {
+        String csv = "SKU,ProductName,AvailableQuantity\nVM-002,Desk,60\n";
+        mockMvc.perform(get("/api/ops/integration-profiles")
+                        .header("X-V-Market-BFF-Secret", "local-bff-secret")
+                        .header("X-V-Market-Ops-Secret", "local-development-only"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/ops/onboarding/supplier-b/1/preview")
+                        .header("X-V-Market-BFF-Secret", "local-bff-secret")
+                        .contentType("text/csv")
+                        .content(csv))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/ops/onboarding/supplier-b/1/preview")
+                        .with(operatorRequest())
+                        .header("X-V-Market-BFF-Secret", "local-bff-secret")
+                        .header("X-V-Market-Ops-Secret", "wrong")
+                        .contentType("text/csv")
+                        .content(csv))
+                .andExpect(status().isUnauthorized());
+        var service = applicationContext.getBean(dev.vmarket.migration.SupplierOnboardingService.class);
+        byte[] bytes = csv.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        var preview = service.preview("supplier-b", 1, bytes, "operator@example.test");
+        service.confirm("supplier-b", 1, bytes, "blocked.csv", preview.confirmationReceipt(), "operator@example.test");
+        jdbc.sql("UPDATE import_work_item SET state='BLOCKED',last_recovery_reason='METADATA_MISMATCH_REQUIRES_REVIEW'")
+                .update();
+        jdbc.sql("UPDATE migration_job SET status='FAILED'").update();
+        var id = jdbc.sql("SELECT id FROM migration_job")
+                .query(java.util.UUID.class)
+                .single();
+        var imports = applicationContext.getBean(dev.vmarket.migration.LegacyImportService.class);
+        assertThat(imports.inspect(id).restartAllowed()).isFalse();
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> imports.restart(id, true))
+                .isInstanceOf(dev.vmarket.migration.ImportConflictException.class);
+    }
+
+    @Test
+    void supplierDatabaseFailureRollsBackChunkAndUsesOnlyTheExistingSafeRestart() {
+        var service = applicationContext.getBean(dev.vmarket.migration.SupplierOnboardingService.class);
+        byte[] bytes = "SKU,ProductName,AvailableQuantity\nVM-002,Recoverable desk,62\n"
+                .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        var preview = service.preview("supplier-b", 1, bytes, "operator@example.test");
+        service.confirm(
+                "supplier-b", 1, bytes, "database-failure.csv", preview.confirmationReceipt(), "operator@example.test");
+        jdbc.sql("""
+                CREATE FUNCTION supplier_db_failure() RETURNS trigger LANGUAGE plpgsql AS $$
+                BEGIN RAISE EXCEPTION 'Synthetic database connection failure' USING ERRCODE='08006'; END; $$
+                """).update();
+        jdbc.sql(
+                        "CREATE TRIGGER supplier_db_failure BEFORE INSERT ON inventory_movement FOR EACH ROW EXECUTE FUNCTION supplier_db_failure()")
+                .update();
+        try {
+            applicationContext.getBean("importDispatcher", Runnable.class).run();
+            assertThat(jdbc.sql("SELECT state FROM import_work_item")
+                            .query(String.class)
+                            .single())
+                    .isEqualTo("FAILED");
+            assertThat(jdbc.sql("SELECT applied_rows FROM migration_job")
+                            .query(Integer.class)
+                            .single())
+                    .isZero();
+            assertThat(jdbc.sql("SELECT COUNT(*) FROM inventory_movement")
+                            .query(Integer.class)
+                            .single())
+                    .isZero();
+            assertThat(jdbc.sql("SELECT version FROM product WHERE sku='VM-002'")
+                            .query(Long.class)
+                            .single())
+                    .isZero();
+        } finally {
+            jdbc.sql("DROP TRIGGER supplier_db_failure ON inventory_movement").update();
+            jdbc.sql("DROP FUNCTION supplier_db_failure()").update();
+        }
+        var job = jdbc.sql("SELECT id FROM migration_job")
+                .query(java.util.UUID.class)
+                .single();
+        applicationContext
+                .getBean(dev.vmarket.migration.LegacyImportService.class)
+                .restart(job, true);
+        applicationContext.getBean("importDispatcher", Runnable.class).run();
+        assertThat(jdbc.sql("SELECT applied_rows FROM migration_job")
+                        .query(Integer.class)
+                        .single())
+                .isEqualTo(1);
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM inventory_movement")
+                        .query(Integer.class)
+                        .single())
+                .isEqualTo(1);
+    }
+
+    @Test
+    void concurrentSupplierConfirmationsShareOneDurableIdentityAndOneMovement() throws Exception {
+        var service = applicationContext.getBean(dev.vmarket.migration.SupplierOnboardingService.class);
+        byte[] bytes = "SKU,ProductName,AvailableQuantity\nVM-002,Concurrent desk,61\n"
+                .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        var preview = service.preview("supplier-b", 1, bytes, "operator@example.test");
+        var gate = new java.util.concurrent.CountDownLatch(1);
+        try (var pool = Executors.newFixedThreadPool(2)) {
+            Callable<Boolean> task = () -> {
+                gate.await();
+                service.confirm(
+                        "supplier-b", 1, bytes, "same.csv", preview.confirmationReceipt(), "operator@example.test");
+                return true;
+            };
+            var first = pool.submit(task);
+            var second = pool.submit(task);
+            gate.countDown();
+            assertThat(first.get(10, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            assertThat(second.get(10, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+        }
+        applicationContext.getBean("importDispatcher", Runnable.class).run();
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM migration_job")
+                        .query(Integer.class)
+                        .single())
+                .isEqualTo(1);
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM inventory_movement")
+                        .query(Integer.class)
+                        .single())
+                .isEqualTo(1);
+    }
+
+    @Test
+    void seededSupplierOnboardingBenchmarkProducesMeasuredImportAndReconciliationEvidence() throws Exception {
+        final int seed = 20261023;
+        var random = new java.util.Random(seed);
+        jdbc.sql("""
+                INSERT INTO product(id,vendor_id,sku,name,category,description,price_minor,image_path,image_alt)
+                SELECT md5('fde-benchmark-'||n)::uuid,'10000000-0000-0000-0000-000000000002',
+                       'RESTART-FDE-'||lpad(n::text,3,'0'),'Synthetic item','OFFICE','Synthetic benchmark',100,'/demo.jpg','Synthetic'
+                FROM generate_series(1,200) n
+                """).update();
+        jdbc.sql(
+                        "INSERT INTO inventory_stock(product_id,on_hand) SELECT id,100 FROM product WHERE sku LIKE 'RESTART-FDE-%'")
+                .update();
+        var csv = new StringBuilder("SKU,ProductName,AvailableQuantity\n");
+        for (int i = 1; i <= 200; i++)
+            csv.append("RESTART-FDE-%03d,Synthetic item %d,%d\n".formatted(i, i, 101 + random.nextInt(100)));
+        for (int i = 1; i <= 20; i++) csv.append("BAD-%d,Synthetic invalid,invalid\n".formatted(i));
+        byte[] bytes = csv.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        var service = applicationContext.getBean(dev.vmarket.migration.SupplierOnboardingService.class);
+        long start = System.nanoTime();
+        var preview = service.preview("supplier-b", 1, bytes, "benchmark");
+        long previewEnd = System.nanoTime();
+        assertThat(preview.acceptedRows()).isEqualTo(200);
+        assertThat(preview.rejectedRows()).isEqualTo(20);
+        service.confirm("supplier-b", 1, bytes, "seeded-supplier.csv", preview.confirmationReceipt(), "benchmark");
+        applicationContext.getBean("importDispatcher", Runnable.class).run();
+        long importEnd = System.nanoTime();
+        service.confirm("supplier-b", 1, bytes, "duplicate.csv", preview.confirmationReceipt(), "benchmark");
+        String job = jdbc.sql("SELECT id::text FROM migration_job")
+                .query(String.class)
+                .single();
+        var auth = operatorRequest();
+        var report = mockMvc.perform(post("/api/ops/reconciliations")
+                        .with(auth)
+                        .header("X-V-Market-BFF-Secret", "local-bff-secret")
+                        .header("X-V-Market-Ops-Secret", "local-development-only")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"migrationJobId\":\"" + job + "\"}"))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        long end = System.nanoTime();
+        var reconciliation = objectMapper.readTree(report);
+        assertThat(reconciliation.path("mismatchCount").asInt()).isZero();
+        assertThat(reconciliation.path("stockNotVerifiedRows").asInt()).isZero();
+        int movements = jdbc.sql("SELECT COUNT(*) FROM inventory_movement")
+                .query(Integer.class)
+                .single();
+        int jobs = jdbc.sql("SELECT COUNT(*) FROM migration_job")
+                .query(Integer.class)
+                .single();
+        assertThat(movements).isEqualTo(200);
+        assertThat(jobs).isEqualTo(1);
+        var metrics = new java.util.LinkedHashMap<String, Object>();
+        metrics.put("seed", seed);
+        metrics.put("synthetic", true);
+        metrics.put("rows", 220);
+        metrics.put("validRows", preview.acceptedRows());
+        metrics.put("rejectedRows", preview.rejectedRows());
+        metrics.put(
+                "sourceSha256",
+                java.util.HexFormat.of()
+                        .formatHex(java.security.MessageDigest.getInstance("SHA-256")
+                                .digest(bytes)));
+        metrics.put("previewMs", (previewEnd - start) / 1_000_000.0);
+        metrics.put("previewThroughImportMs", (importEnd - start) / 1_000_000.0);
+        metrics.put("endToEndThroughReconciliationMs", (end - start) / 1_000_000.0);
+        metrics.put("acceptedRowsPerSecondThroughImport", 200.0 / ((importEnd - start) / 1_000_000_000.0));
+        metrics.put("jobsAfterDuplicate", jobs);
+        metrics.put("movementsAfterDuplicate", movements);
+        metrics.put("mismatches", reconciliation.path("mismatchCount").asInt());
+        metrics.put(
+                "unverifiedStockRows",
+                reconciliation.path("stockNotVerifiedRows").asInt());
+        metrics.put(
+                "environment",
+                System.getProperty("os.name") + " / Java " + System.getProperty("java.version")
+                        + " / PG17.6 Redis8.2 Testcontainers");
+        metrics.put("measuredAt", java.time.Instant.now().toString());
+        objectMapper
+                .writerWithDefaultPrettyPrinter()
+                .writeValue(
+                        java.nio.file.Path.of("target/onboarding-benchmark.json")
+                                .toFile(),
+                        metrics);
+    }
+
+    @Test
+    void stagedSupplierSnapshotRejectsLaterCatalogChangesAndInactiveProfilesCannotConfirm() {
+        var service = applicationContext.getBean(dev.vmarket.migration.SupplierOnboardingService.class);
+        var profiles = applicationContext.getBean(dev.vmarket.migration.IntegrationProfileService.class);
+        byte[] bytes =
+                "SKU,ProductName,AvailableQuantity\nVM-002,Desk,60\n".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        var preview = service.preview("supplier-b", 1, bytes, "operator@example.test");
+        profiles.activate("supplier-b", 1, false, "operator@example.test");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.confirm(
+                        "supplier-b", 1, bytes, "file.csv", preview.confirmationReceipt(), "operator@example.test"))
+                .isInstanceOf(dev.vmarket.migration.ImportConflictException.class)
+                .hasMessageContaining("inactive");
+        profiles.activate("supplier-b", 1, true, "operator@example.test");
+        service.confirm("supplier-b", 1, bytes, "file.csv", preview.confirmationReceipt(), "operator@example.test");
+        jdbc.sql("UPDATE product SET price_minor=5800,version=version+1 WHERE sku='VM-002'")
+                .update();
+        applicationContext.getBean("importDispatcher", Runnable.class).run();
+        assertThat(jdbc.sql("SELECT validation_error FROM staged_import_row")
+                        .query(String.class)
+                        .single())
+                .contains("STALE_PRODUCT_VERSION");
+        assertThat(jdbc.sql("SELECT price_minor FROM product WHERE sku='VM-002'")
+                        .query(Integer.class)
+                        .single())
+                .isEqualTo(5800);
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM inventory_movement")
+                        .query(Integer.class)
+                        .single())
+                .isZero();
+    }
+
+    @Test
+    void supplierProfilesDecodeOriginalCp932AndRejectWrongEncodingHeadersAndOversizedInputsBeforeStaging() {
+        var service = applicationContext.getBean(dev.vmarket.migration.SupplierOnboardingService.class);
+        byte[] cp932 = "商品コード,商品名,在庫数\nVM-001,軽量ジャケット,35\n".getBytes(Charset.forName("windows-31j"));
+        var preview = service.preview("supplier-a", 1, cp932, "operator@example.test");
+        assertThat(preview.acceptedRows()).isEqualTo(1);
+        assertThat(preview.sample().getFirst().name()).isEqualTo("軽量ジャケット");
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                        () -> service.preview("supplier-b", 1, cp932, "operator@example.test"))
+                .isInstanceOf(dev.vmarket.migration.InvalidImportException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                        () -> service.preview("supplier-a", 1, new byte[] {(byte) 0x81}, "operator@example.test"))
+                .isInstanceOf(dev.vmarket.migration.InvalidImportException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.preview(
+                        "supplier-b", 1, "SKU,ProductName\nVM-002,Desk\n".getBytes(), "operator@example.test"))
+                .isInstanceOf(dev.vmarket.migration.InvalidImportException.class)
+                .hasMessageContaining("Missing required");
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                        () -> service.preview("supplier-b", 1, new byte[5_000_001], "operator@example.test"))
+                .isInstanceOf(dev.vmarket.migration.InvalidImportException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.preview(
+                        "supplier-b",
+                        1,
+                        ("SKU,ProductName,AvailableQuantity\n" + "VM-002,Desk,60\n".repeat(1001)).getBytes(),
+                        "operator@example.test"))
+                .isInstanceOf(dev.vmarket.migration.InvalidImportException.class)
+                .hasMessageContaining("1000");
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM migration_job")
+                        .query(Integer.class)
+                        .single())
+                .isZero();
+    }
+
+    @Test
+    void previewConfirmationIsBoundToTheOperatorBytesAndCurrentCatalogState() {
+        var service = applicationContext.getBean(dev.vmarket.migration.SupplierOnboardingService.class);
+        byte[] bytes =
+                "SKU,ProductName,AvailableQuantity\nVM-002,Desk,60\n".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        var preview = service.preview("supplier-b", 1, bytes, "operator@example.test");
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                        () -> service.confirm("supplier-b", 1, bytes, "file.csv", null, "operator@example.test"))
+                .isInstanceOf(dev.vmarket.migration.ImportConflictException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.confirm(
+                        "supplier-b", 1, bytes, "file.csv", preview.confirmationReceipt(), "different-operator"))
+                .isInstanceOf(dev.vmarket.migration.ImportConflictException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.confirm(
+                        "supplier-b",
+                        1,
+                        "changed".getBytes(),
+                        "file.csv",
+                        preview.confirmationReceipt(),
+                        "operator@example.test"))
+                .isInstanceOf(dev.vmarket.migration.ImportConflictException.class);
+        jdbc.sql("UPDATE product SET price_minor=5800,version=version+1 WHERE sku='VM-002'")
+                .update();
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.confirm(
+                        "supplier-b", 1, bytes, "file.csv", preview.confirmationReceipt(), "operator@example.test"))
+                .isInstanceOf(dev.vmarket.migration.ImportConflictException.class)
+                .hasMessageContaining("changed after preview");
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM migration_job")
+                        .query(Integer.class)
+                        .single())
+                .isZero();
+    }
+
+    @Test
+    void identicalSupplierBytesCannotReplayThroughAnotherProfileVersionOrLegacyEndpoint() {
+        var service = applicationContext.getBean(dev.vmarket.migration.SupplierOnboardingService.class);
+        var profiles = applicationContext.getBean(dev.vmarket.migration.IntegrationProfileService.class);
+        profiles.publish(
+                new dev.vmarket.migration.IntegrationProfileService.Definition(
+                        "supplier-b",
+                        2,
+                        "UTF-8",
+                        "RIVERBYTE",
+                        java.util.Map.of("sku", "SKU", "name", "ProductName", "on_hand", "AvailableQuantity"),
+                        "TRIM_UPPER"),
+                "operator@example.test");
+        profiles.activate("supplier-b", 2, true, "operator@example.test");
+        byte[] bytes =
+                "SKU,ProductName,AvailableQuantity\nVM-002,Desk,60\n".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        var p1 = service.preview("supplier-b", 1, bytes, "operator@example.test");
+        var p2 = service.preview("supplier-b", 2, bytes, "operator@example.test");
+        service.confirm("supplier-b", 1, bytes, "v1.csv", p1.confirmationReceipt(), "operator@example.test");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.confirm(
+                        "supplier-b", 2, bytes, "v2.csv", p2.confirmationReceipt(), "operator@example.test"))
+                .isInstanceOf(dev.vmarket.migration.ImportConflictException.class)
+                .hasMessageContaining("different profile/version");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> applicationContext
+                        .getBean(dev.vmarket.migration.LegacyImportService.class)
+                        .importCsv("legacy.csv", "UTF-8", bytes, true))
+                .isInstanceOf(dev.vmarket.migration.ImportConflictException.class);
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM migration_job")
+                        .query(Integer.class)
+                        .single())
+                .isEqualTo(1);
+    }
+
+    @Test
+    void oversizedRejectedSupplierCellsCannotPoisonTheValidRowsStagingTransaction() {
+        var service = applicationContext.getBean(dev.vmarket.migration.SupplierOnboardingService.class);
+        byte[] bytes = ("SKU,ProductName,AvailableQuantity\nVM-002,Desk,60\n" + "X".repeat(200) + ",Name,5\n")
+                .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        var preview = service.preview("supplier-b", 1, bytes, "operator@example.test");
+        assertThat(preview.acceptedRows()).isEqualTo(1);
+        assertThat(preview.rejectedRows()).isEqualTo(1);
+        service.confirm(
+                "supplier-b", 1, bytes, "oversized.csv", preview.confirmationReceipt(), "operator@example.test");
+        applicationContext.getBean("importDispatcher", Runnable.class).run();
+        assertThat(jdbc.sql("SELECT applied_rows FROM migration_job")
+                        .query(Integer.class)
+                        .single())
+                .isEqualTo(1);
+    }
+
+    @Test
+    void importInspectionExposesSafeReasonsAndWorkStateNotRawPayload() throws Exception {
+        var imports = applicationContext.getBean(dev.vmarket.migration.LegacyImportService.class);
+        imports.importCsv(
+                "inspection.csv",
+                "UTF-8",
+                "sku,vendor_code,name,on_hand,price_minor\nVM-001,NAMI,Private cell,invalid-sensitive-value,11000\n"
+                        .getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                true);
+        String id = jdbc.sql("SELECT id::text FROM migration_job")
+                .query(String.class)
+                .single();
+        mockMvc.perform(get("/api/ops/imports/" + id + "/inspection")
+                        .with(operatorRequest())
+                        .header("X-V-Market-BFF-Secret", "local-bff-secret")
+                        .header("X-V-Market-Ops-Secret", "local-development-only"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("workState").value("READY"))
+                .andExpect(jsonPath("restartAllowed").value(false))
+                .andExpect(jsonPath("errors[0].rowNumber").value(2))
+                .andExpect(result -> assertThat(result.getResponse().getContentAsString())
+                        .doesNotContain("Private cell", "invalid-sensitive-value", "claimToken"));
+    }
+
+    @Test
+    void confirmedSupplierPreviewUsesExistingDurableImportAndRawByteDedup() throws Exception {
+        var auth = operatorRequest();
+        String csv = "SKU,ProductName,AvailableQuantity\nVM-002,Updated desk,60\n";
+        String preview = mockMvc.perform(post("/api/ops/onboarding/supplier-b/1/preview")
+                        .with(auth)
+                        .header("X-V-Market-BFF-Secret", "local-bff-secret")
+                        .header("X-V-Market-Ops-Secret", "local-development-only")
+                        .contentType("text/csv")
+                        .content(csv))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        String receipt =
+                objectMapper.readTree(preview).path("confirmationReceipt").asText();
+        String job = mockMvc.perform(post("/api/ops/onboarding/supplier-b/1/confirm")
+                        .with(auth)
+                        .header("X-V-Market-BFF-Secret", "local-bff-secret")
+                        .header("X-V-Market-Ops-Secret", "local-development-only")
+                        .header("X-Source-Name", "supplier-b.csv")
+                        .header("X-Preview-Receipt", receipt)
+                        .contentType("text/csv")
+                        .content(csv))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("status").value("STAGED"))
+                .andExpect(jsonPath("profileId").value("supplier-b"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        String id = objectMapper.readTree(job).path("id").asText();
+        applicationContext.getBean("importDispatcher", Runnable.class).run();
+        mockMvc.perform(post("/api/ops/onboarding/supplier-b/1/confirm")
+                        .with(auth)
+                        .header("X-V-Market-BFF-Secret", "local-bff-secret")
+                        .header("X-V-Market-Ops-Secret", "local-development-only")
+                        .header("X-Source-Name", "renamed.csv")
+                        .header("X-Preview-Receipt", receipt)
+                        .contentType("text/csv")
+                        .content(csv))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("id").value(id));
+        assertThat(jdbc.sql(
+                                "SELECT on_hand FROM inventory_stock s JOIN product p ON p.id=s.product_id WHERE sku='VM-002'")
+                        .query(Integer.class)
+                        .single())
+                .isEqualTo(60);
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM inventory_movement")
+                        .query(Integer.class)
+                        .single())
+                .isEqualTo(1);
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM migration_job")
+                        .query(Integer.class)
+                        .single())
+                .isEqualTo(1);
+    }
+
+    @Test
+    void supplierPreviewMapsAndQuarantinesRowsWithoutAnyBusinessWrites() throws Exception {
+        var response = mockMvc.perform(post("/api/ops/onboarding/supplier-b/1/preview")
+                        .with(operatorRequest())
+                        .header("X-V-Market-BFF-Secret", "local-bff-secret")
+                        .header("X-V-Market-Ops-Secret", "local-development-only")
+                        .contentType("text/csv")
+                        .content("SKU,ProductName,AvailableQuantity\n vm-002 ,Desk,60\nVM-005,Basket,not-a-number\n"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("acceptedRows").value(1))
+                .andExpect(jsonPath("rejectedRows").value(1))
+                .andExpect(jsonPath("sample[0].sku").value("VM-002"))
+                .andExpect(jsonPath("errors[0].rowNumber").value(3))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        assertThat(response).doesNotContain("not-a-number");
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM migration_job")
+                        .query(Integer.class)
+                        .single())
+                .isZero();
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM inventory_movement")
+                        .query(Integer.class)
+                        .single())
+                .isZero();
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM audit_event")
+                        .query(Integer.class)
+                        .single())
+                .isZero();
+        assertThat(jdbc.sql("SELECT version FROM product WHERE sku='VM-002'")
+                        .query(Long.class)
+                        .single())
+                .isZero();
+    }
+
+    @Test
+    void operatorPublishesImmutableProfileVersionAndAuditsActivation() throws Exception {
+        var auth = operatorRequest();
+        String definition = """
+                {"profileId":"supplier-b","version":2,"encoding":"UTF-8","vendorCode":"RIVERBYTE",
+                 "mapping":{"sku":"SKU","name":"ProductName","on_hand":"AvailableQuantity"},"skuNormalization":"TRIM_UPPER"}
+                """;
+        mockMvc.perform(post("/api/ops/integration-profiles")
+                        .with(auth)
+                        .header("X-V-Market-BFF-Secret", "local-bff-secret")
+                        .header("X-V-Market-Ops-Secret", "local-development-only")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(definition))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("active").value(false));
+        mockMvc.perform(patch("/api/ops/integration-profiles/supplier-b/2")
+                        .with(auth)
+                        .header("X-V-Market-BFF-Secret", "local-bff-secret")
+                        .header("X-V-Market-Ops-Secret", "local-development-only")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"active\":true}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("active").value(true));
+        mockMvc.perform(post("/api/ops/integration-profiles")
+                        .with(auth)
+                        .header("X-V-Market-BFF-Secret", "local-bff-secret")
+                        .header("X-V-Market-Ops-Secret", "local-development-only")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(definition))
+                .andExpect(status().isConflict());
+        assertThat(jdbc.sql(
+                                "SELECT COUNT(*) FROM audit_event WHERE aggregate_type='INTEGRATION_PROFILE' AND actor='operator@example.test'")
+                        .query(Integer.class)
+                        .single())
+                .isEqualTo(2);
+    }
+
+    @Test
+    void supplierProfilesExposeVersionedMappingsWithoutCreatingImportWork() throws Exception {
+        mockMvc.perform(get("/api/ops/integration-profiles")
+                        .with(operatorRequest())
+                        .header("X-V-Market-BFF-Secret", "local-bff-secret")
+                        .header("X-V-Market-Ops-Secret", "local-development-only"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].profileId").value("supplier-a"))
+                .andExpect(jsonPath("$[0].version").value(1))
+                .andExpect(jsonPath("$[0].encoding").value("CP932"))
+                .andExpect(jsonPath("$[0].mapping.sku").value("商品コード"));
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM migration_job")
+                        .query(Integer.class)
+                        .single())
+                .isZero();
+    }
+
+    @Test
     void checkoutKeyLockAlsoTimesOutWithoutExecutingASecondSale() throws Exception {
         String lockName = jdbc.sql("""
                 SELECT 'vmarket:checkout:'||encode(sha256(convert_to(

@@ -12,6 +12,7 @@ const forwardedRequestHeaders = [
   "x-checkout-session",
   "x-source-name",
   "x-source-encoding",
+  "x-preview-receipt",
   "cookie",
   "x-csrf-token",
   "prefer",
@@ -131,7 +132,9 @@ export async function proxyToBackend(
   let body: Uint8Array<ArrayBuffer> | undefined;
   try {
     body = method === "GET" || method === "HEAD" ? undefined
-      : await withinDeadline(10_000, signal => readBoundedBody(request, path === "/api/ops/imports" ? 5_000_000 : 65_536, signal));
+      : await withinDeadline(10_000, signal => readBoundedBody(request,
+        path === "/api/ops/imports" || /^\/api\/ops\/onboarding\/[a-z][a-z0-9-]{0,47}\/[1-9][0-9]{0,9}\/(preview|confirm)$/.test(path)
+          ? 5_000_000 : 65_536, signal));
   } catch (failure) {
     const large = failure instanceof BodyBudgetExceeded;
     const timeout = failure instanceof ProxyDeadlineExceeded;

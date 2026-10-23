@@ -2,6 +2,27 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildBackendHeaders, proxyToBackend } from "@/lib/backend-proxy";
 
 describe("backend BFF boundary", () => {
+  it("accepts the full positive Java integer profile-version range with the CSV budget", async () => {
+    vi.stubEnv("BACKEND_ORIGIN","https://backend.test");
+    vi.stubGlobal("fetch",vi.fn().mockResolvedValue(Response.json({acceptedRows:1})));
+    const {POST}=await import("@/app/api/ops/onboarding/[profileId]/[version]/[action]/route");
+    const response=await POST(new Request("https://ui.test/api/ops/onboarding/supplier-b/2147483647/preview",{
+      method:"POST",body:new Uint8Array(70_000),headers:{"Content-Type":"text/csv"},
+    }),{params:Promise.resolve({profileId:"supplier-b",version:"2147483647",action:"preview"})});
+    expect(response.status).toBe(200);
+  });
+  it("preserves supplier upload bytes and the preview receipt within the existing CSV budget", async () => {
+    vi.stubEnv("BACKEND_ORIGIN","https://backend.test");
+    const upstream=vi.fn().mockResolvedValue(Response.json({acceptedRows:1}));
+    vi.stubGlobal("fetch",upstream);
+    const bytes=new Uint8Array(70_000).fill(65);
+    const path="/api/ops/onboarding/supplier-a/1/confirm";
+    const response=await proxyToBackend(new Request(`https://ui.test${path}`,{method:"POST",body:bytes,
+      headers:{"Content-Type":"text/csv","X-Preview-Receipt":"signed-receipt"}}),path,{operations:true});
+    expect(response.status).toBe(200);
+    expect(upstream.mock.calls[0][1].body).toEqual(bytes);
+    expect(upstream.mock.calls[0][1].headers.get("X-Preview-Receipt")).toBe("signed-receipt");
+  });
   it("sanitizes an unreadable request stream before dispatch", async () => {
     vi.stubEnv("BACKEND_ORIGIN", "https://backend.test");
     const upstream = vi.fn();

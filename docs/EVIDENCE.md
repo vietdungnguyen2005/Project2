@@ -1,5 +1,9 @@
 # Evidence matrix
 
+## Supplier onboarding extension (local feature)
+
+[Requirements and local quality gates](fde/acceptance-criteria.md), [seeded measured impact](fde/impact-evaluation.md), [synthetic customer demo](fde/customer-demo-script.md), and [PR review summary](fde/pr-summary.md) cover immutable profiles, read-only preview, explicit confirmation, same-byte/version conflicts, original queue/recovery and reconciliation. All screenshots/measurements there are synthetic local evidence, not a new free-tier/AWS deployment or remote feature CI result.
+
 ## Deployment evidence
 
 Deployment files below are historical evidence, not proof that the current working-tree remediation is live. Current local fixes, commands, results and remaining limitations are tracked in [remediation evidence](evidence/remediation-2026-10-18.md).

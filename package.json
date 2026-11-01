@@ -14,7 +14,8 @@
     "typecheck": "tsc --noEmit",
     "verify": "npm run test && npm run lint && npm run typecheck && npm run build",
     "test": "vitest run",
-    "test:e2e": "python tools/qa_playwright.py"
+    "test:e2e": "python tools/qa_playwright.py",
+    "test:e2e:handoff": "python tools/qa_supplier_handoff.py"
   },
   "dependencies": {
     "@opennextjs/cloudflare": "1.20.12",

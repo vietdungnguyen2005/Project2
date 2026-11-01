@@ -48,12 +48,15 @@ jobs:
             sleep 1
           done
           npm run test:e2e
+          QA_ARTIFACT_DIR=docs/evidence/handoff npm run test:e2e:handoff
 
       - name: Upload browser evidence
         uses: actions/upload-artifact@v4
         with:
           name: browser-evidence
-          path: docs/evidence/*.png
+          path: |
+            docs/evidence/*.png
+            docs/evidence/handoff/
 
       - name: Build Cloudflare Worker bundle (no deployment)
         run: npm run build:worker

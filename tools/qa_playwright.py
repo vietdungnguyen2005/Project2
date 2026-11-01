@@ -1,4 +1,5 @@
 import os
+import time
 from pathlib import Path
 from playwright.sync_api import expect, sync_playwright
 
@@ -52,7 +53,7 @@ def install_api_contract(page):
         "profileId":"supplier-b","version":1,"encoding":"UTF-8",
         "mapping":{"sku":"SKU","name":"ProductName","on_hand":"AvailableQuantity"},
         "acceptedRows":1,"rejectedRows":1,"sample":[{"rowNumber":2,"sku":"VM-002","name":"Modular desk","onHand":60}],
-        "errors":[{"rowNumber":3,"reason":"on_hand must be an integer between 0 and 1000000"}],"confirmationReceipt":"fixture-receipt"
+        "errors":[{"rowNumber":3,"reason":"on_hand must be an integer between 0 and 1000000"}],"confirmationReceipt":f"{int(time.time())+600}:"+":".join(["a"*64]*3)
     }))
     page.route("**/api/ops/onboarding/supplier-b/1/confirm",lambda route: route.fulfill(status=202,json={
         "id":"fixture-supplier-job","status":"STAGED","profileId":"supplier-b","profileVersion":1,

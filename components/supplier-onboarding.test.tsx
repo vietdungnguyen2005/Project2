@@ -4,6 +4,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { SupplierOnboarding } from "@/components/supplier-onboarding";
 
 describe("supplier onboarding", () => {
+  it("offers a separate mapping review panel only when explicitly enabled",()=>{
+    const html=renderToStaticMarkup(<QueryClientProvider client={new QueryClient()}><SupplierOnboarding onImported={async()=>{}} mappingEnabled /></QueryClientProvider>);
+    expect(html).toContain("Mapping draft / human review");
+  });
   it("starts with a read-only preview step and no enabled confirmation", () => {
     const html=renderToStaticMarkup(<QueryClientProvider client={new QueryClient()}><SupplierOnboarding onImported={async()=>{}} /></QueryClientProvider>);
     expect(html).toContain("Supplier onboarding");

@@ -20,7 +20,7 @@ const validation = z.strictObject({
   name: z.strictObject({ type: z.literal("string"), minLength: z.literal(1), maxLength: z.literal(160) }),
   on_hand: z.strictObject({ type: z.literal("integer"), min: z.literal(0), max: z.literal(1000000) }),
 });
-const Profile = z.object({ profileId, version, encoding: z.enum(["UTF-8", "CP932"]), vendorCode: z.string().min(1).max(32),
+export const Profile = z.object({ profileId, version, encoding: z.enum(["UTF-8", "CP932"]), vendorCode: z.string().min(1).max(32),
   mapping, skuNormalization: z.enum(["TRIM", "TRIM_UPPER"]), active: z.boolean(),
   requiredFields: z.tuple([z.literal("sku"), z.literal("name"), z.literal("on_hand")]), validation,
   normalization: z.strictObject({ sku: z.enum(["TRIM", "TRIM_UPPER"]), name: z.literal("TRIM"), on_hand: z.literal("TRIM_INTEGER") }),

@@ -50,6 +50,18 @@ jobs:
           npm run test:e2e
           QA_ARTIFACT_DIR=docs/evidence/handoff npm run test:e2e:handoff
 
+      - name: Browser mapping draft contract QA
+        shell: bash
+        run: |
+          AI_COPILOT_ENABLED=true AI_MAPPING_DRAFTS_ENABLED=true npm run start -- --hostname 127.0.0.1 --port 3001 &
+          server_pid=$!
+          trap 'kill $server_pid' EXIT
+          for attempt in {1..30}; do
+            curl --fail --silent http://127.0.0.1:3001/ops >/dev/null && break
+            sleep 1
+          done
+          BASE_URL=http://127.0.0.1:3001 QA_ARTIFACT_DIR=docs/evidence/mapping npm run test:e2e:mapping
+
       - name: Upload browser evidence
         uses: actions/upload-artifact@v4
         with:
@@ -57,6 +69,7 @@ jobs:
           path: |
             docs/evidence/*.png
             docs/evidence/handoff/
+            docs/evidence/mapping/
 
       - name: Build Cloudflare Worker bundle (no deployment)
         run: npm run build:worker

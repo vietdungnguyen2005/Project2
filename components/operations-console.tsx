@@ -29,7 +29,7 @@ function statusStyle(status: MigrationSummary["status"]): string {
   return "border-cyan-400/40 bg-cyan-400/10 text-cyan-100";
 }
 
-export function OperationsConsole() {
+export function OperationsConsole({mappingEnabled=false}:{mappingEnabled?:boolean}) {
   const queryClient = useQueryClient();
   const [sourceName, setSourceName] = useState("legacy-catalog.csv");
   const [encoding, setEncoding] = useState<"UTF-8" | "CP932">("UTF-8");
@@ -129,7 +129,7 @@ export function OperationsConsole() {
           </div>
         ) : null}
 
-        <SupplierOnboarding onImported={rememberJob} />
+        <SupplierOnboarding onImported={rememberJob} mappingEnabled={mappingEnabled} />
 
         <section aria-labelledby="orders-heading" className="mt-8 border border-white/15 bg-[#111715] p-5 sm:p-6">
           <div className="flex flex-wrap items-end justify-between gap-4 border-b border-white/15 pb-4">

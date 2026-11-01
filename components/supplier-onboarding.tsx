@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { receiptExpiry } from "@/lib/supplier-handoff";
+import { MappingDraftReview } from "./mapping-draft-review";
 import { confirmSupplier, loadIntegrationProfiles, loadMigrationJobs, previewSupplier, selectImportPayload,
   type IntegrationProfile, type MigrationSummary, type SupplierPreview } from "@/lib/operations-api";
 
@@ -10,7 +11,7 @@ const inputStyle="min-h-11 w-full border border-white/20 bg-[#0b0f0e] px-3 py-2 
 const buttonStyle="min-h-11 border border-[#2de1c2]/50 px-4 py-2 text-sm font-bold text-[#7ef5df] hover:bg-[#2de1c2]/10 disabled:opacity-40";
 type Review={profile:IntegrationProfile;body:string|ArrayBuffer;sourceName:string;result:SupplierPreview};
 
-export function SupplierOnboarding({onImported}:{onImported:(job:MigrationSummary)=>Promise<void>}) {
+export function SupplierOnboarding({onImported,mappingEnabled=false}:{onImported:(job:MigrationSummary)=>Promise<void>;mappingEnabled?:boolean}) {
   const queryClient=useQueryClient();
   const profiles=useQuery({queryKey:["integration-profiles"],queryFn:({signal})=>loadIntegrationProfiles(signal),retry:false});
   const [selected,setSelected]=useState("supplier-b:1");
@@ -23,13 +24,14 @@ export function SupplierOnboarding({onImported}:{onImported:(job:MigrationSummar
   const [approved,setApproved]=useState(false);
   const [inspectionRequired,setInspectionRequired]=useState(false);
   const [refreshError,setRefreshError]=useState(false);
+  const [mappingBusy,setMappingBusy]=useState(false),[sourceRevision,setSourceRevision]=useState(0);
   const inspection=useMutation({retry:false,mutationFn:()=>loadMigrationJobs(),onSuccess:jobs=>queryClient.setQueryData(["migration-jobs"],jobs)});
   const [now,setNow]=useState(()=>Date.now());
   useEffect(()=>{const timer=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(timer);},[]);
   const expires=review?receiptExpiry(review.result.confirmationReceipt):null;
   const expired=review!==null && (expires===null || expires<=now);
   const profile=profiles.data?.find(item=>`${item.profileId}:${item.version}`===selected && item.active);
-  const invalidate=()=>{setReview(null);setApproved(false);};
+  const invalidate=()=>{setReview(null);setApproved(false);setSourceRevision(value=>value+1);};
   const preview=useMutation({retry:false,mutationFn:async()=>{
     if (inspectionRequired) throw new Error("Inspect current Import runs before preparing another preview.");
     if (!profile) throw new Error("Select an active profile version.");
@@ -46,7 +48,7 @@ export function SupplierOnboarding({onImported}:{onImported:(job:MigrationSummar
     return confirmSupplier(review.profile.profileId,review.profile.version,review.sourceName,review.body,review.result.confirmationReceipt);
   },onSuccess:job=>{invalidate();setRefreshError(false);void onImported(job).catch(()=>setRefreshError(true));},
   onError:()=>{setInspectionRequired(true);setApproved(false);inspection.reset();}});
-  const busy=preview.isPending || confirm.isPending || fileLoading || inspectionRequired;
+  const busy=preview.isPending || confirm.isPending || fileLoading || inspectionRequired || mappingBusy;
 
   return <section aria-labelledby="supplier-heading" className="mt-8 border border-[#2de1c2]/30 bg-[#111715] p-5 sm:p-6">
     <div className="border-b border-white/15 pb-4">
@@ -54,6 +56,9 @@ export function SupplierOnboarding({onImported}:{onImported:(job:MigrationSummar
       <h2 id="supplier-heading" className="mt-1 text-2xl font-black">Supplier onboarding</h2>
       <p className="mt-3 max-w-3xl text-sm leading-6 text-[#9bb3a6]">Synthetic suppliers, one shared store. Preview is read-only. Vendor, price and concurrency versions come from the canonical catalog; changed rows are rejected rather than overwriting later stock or metadata.</p>
     </div>
+    {mappingEnabled?<MappingDraftReview key={`${sourceRevision}:${profile?.profileId}:${profile?.version}`} source={profile} disabled={preview.isPending||confirm.isPending||fileLoading||inspectionRequired} filename={sourceName} onBusy={setMappingBusy}
+      original={()=>{if(!profile)throw new Error("Profile required");const body=selectImportPayload(profile.encoding,csv,fileBytes);return typeof body==="string"?new TextEncoder().encode(body).buffer:body.slice(0);}}
+      onAdopt={async(id,version,raw,filename)=>{const current=await loadIntegrationProfiles();if(!current.some(p=>p.profileId===id&&p.version===version&&p.active))throw new Error("Active profile unavailable");queryClient.setQueryData(["integration-profiles"],current);setSelected(`${id}:${version}`);setFileBytes(raw.slice(0));setSourceName(filename);invalidate();preview.reset();confirm.reset();}}/>:null}
     <div className="mt-5 grid gap-6 lg:grid-cols-2">
       <form className="grid content-start gap-4" onSubmit={event=>{event.preventDefault();invalidate();preview.mutate();}}>
         <fieldset disabled={busy} className="grid gap-4 disabled:opacity-60">

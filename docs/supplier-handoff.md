@@ -30,6 +30,7 @@ identity and pending acknowledgement. It also checks mobile overflow. Its result
 do not prove real Java/database integration or AI mapping quality. Existing Java
 integration tests remain separate.
 
-This is the first P10 increment. Signed mapping drafts, editable new inactive
-profile creation, separate activation and real draft-to-import database-invariant
-acceptance remain pending. Existing AI feature defaults remain off.
+The P10b [mapping draft panel](ai-mapping.md) adds signed suggestions, editable
+inactive profile creation and separate activation, followed by this workflow.
+AI feature defaults remain off. Real local integration evidence is published in
+AI_Applied; browser mock results alone are not database acceptance evidence.

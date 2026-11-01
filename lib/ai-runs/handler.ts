@@ -56,6 +56,7 @@ export class RunHandler implements AgentGatewaySpec {
         return parsed.data;
       };
       let snapshot:Snapshot;
+      const observations:Observation[]=[];
       if(input.action==="start"){
         const conversation=randomUUID();
         snapshot=await control({action:"start",question:input.question,collection_ids:scopes,conversation_id:conversation});
@@ -105,6 +106,7 @@ export class RunHandler implements AgentGatewaySpec {
               snapshot=await control({action:"record",expected_revision:leased.state.revision,lease_id:leased.lease_id,observation:observed},leased.state.step);
               const summary=snapshot.state.observations.at(-1);
               if(snapshot.state.step!==leased.state.step+1||snapshot.state.phase!=="idle"||snapshot.state.observations.length!==leased.state.observations.length+1||summary?.call_id!==observed.call_id||summary.status!==observed.status)throw new TransportFailure("OUTPUT_INVALID",502);
+              observations.push(observed);
             }
             if(!finished&&snapshot.state.status==="started")return fail("BUDGET_EXCEEDED",429);
           }
@@ -112,7 +114,7 @@ export class RunHandler implements AgentGatewaySpec {
       }
       const finalAuth=await session.check(auth.data,true);if(!finalAuth.success)return finalAuth;
       if(snapshot.state.outcome?.status==="answered"&&(!snapshot.state.observations.length||snapshot.state.observations.some(o=>o.status!=="ok")))return fail("OUTPUT_INVALID",502);
-      return {success:true,data:{run:snapshot.state}};
+      return {success:true,data:{run:snapshot.state,observations}};
     }finally{this.cookies.push(...session.refreshedCookies);}
   }
 }

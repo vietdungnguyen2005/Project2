@@ -9,5 +9,8 @@ export const metadata: Metadata = {
 export const dynamic="force-dynamic";
 
 export default function OperationsPage() {
-  return <OperatorAccess><OperationsConsole mappingEnabled={process.env.AI_COPILOT_ENABLED==="true"&&process.env.AI_MAPPING_DRAFTS_ENABLED==="true"} /></OperatorAccess>;
+  const enabled=process.env.AI_COPILOT_ENABLED==="true";
+  return <OperatorAccess><OperationsConsole mappingEnabled={enabled&&process.env.AI_MAPPING_DRAFTS_ENABLED==="true"}
+    copilotEnabled={enabled&&process.env.AI_COPILOT_PANEL_ENABLED==="true"}
+    qaEnabled={enabled&&process.env.AI_QA_ENABLED==="true"} runsEnabled={enabled&&process.env.AI_RUNS_ENABLED==="true"}/></OperatorAccess>;
 }

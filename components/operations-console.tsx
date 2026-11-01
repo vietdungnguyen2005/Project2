@@ -5,6 +5,7 @@ import { AlertTriangle, ArrowLeft, CheckCircle2, DatabaseZap, FileUp, PackageChe
 import { useMemo, useState } from "react";
 import { SupplierOnboarding } from "@/components/supplier-onboarding";
 import { ImportInspection } from "@/components/import-inspection";
+import { OperatorCopilot } from "@/components/operator-copilot";
 import {
   advanceFulfillment,
   loadInventorySnapshot,
@@ -29,7 +30,7 @@ function statusStyle(status: MigrationSummary["status"]): string {
   return "border-cyan-400/40 bg-cyan-400/10 text-cyan-100";
 }
 
-export function OperationsConsole({mappingEnabled=false}:{mappingEnabled?:boolean}) {
+export function OperationsConsole({mappingEnabled=false,copilotEnabled=false,qaEnabled=false,runsEnabled=false}:{mappingEnabled?:boolean;copilotEnabled?:boolean;qaEnabled?:boolean;runsEnabled?:boolean}) {
   const queryClient = useQueryClient();
   const [sourceName, setSourceName] = useState("legacy-catalog.csv");
   const [encoding, setEncoding] = useState<"UTF-8" | "CP932">("UTF-8");
@@ -129,6 +130,7 @@ export function OperationsConsole({mappingEnabled=false}:{mappingEnabled?:boolea
           </div>
         ) : null}
 
+        {copilotEnabled&&<OperatorCopilot qaEnabled={qaEnabled} runsEnabled={runsEnabled}/>}
         <SupplierOnboarding onImported={rememberJob} mappingEnabled={mappingEnabled} />
 
         <section aria-labelledby="orders-heading" className="mt-8 border border-white/15 bg-[#111715] p-5 sm:p-6">

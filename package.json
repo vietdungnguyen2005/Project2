@@ -16,7 +16,8 @@
     "test": "vitest run",
     "test:e2e": "python tools/qa_playwright.py",
     "test:e2e:handoff": "python tools/qa_supplier_handoff.py",
-    "test:e2e:mapping": "python tools/qa_mapping_drafts.py"
+    "test:e2e:mapping": "python tools/qa_mapping_drafts.py",
+    "test:e2e:copilot": "python tools/qa_copilot.py"
   },
   "dependencies": {
     "@opennextjs/cloudflare": "1.20.12",

@@ -1,23 +1,50 @@
-# Optional read-only AI gateway (P09)
+# Operator Copilot (P12)
 
-`POST /api/ops/ai/agent` is additive and **OFF by default** (`AI_COPILOT_ENABLED=false`). Existing operations, checkout, import, profile and Java authorization code are unchanged. There is no AI UI, write tool, deployment or persistent key provisioning in this change.
+The existing `/ops` page has an optional evidence desk. All flags are server-only
+and default OFF: `AI_COPILOT_ENABLED` plus `AI_COPILOT_PANEL_ENABLED` display the
+desk; `AI_QA_ENABLED`, `AI_RUNS_ENABLED` and `AI_MAPPING_DRAFTS_ENABLED` enable
+their individual capabilities. The public storefront does not load the desk.
+Existing authenticated manual operations remain available without AI.
 
-With the flag off, it returns 503 AI_DISABLED and makes no upstream call. When explicitly configured, input is only a bounded question and optional collection IDs. The BFF checks the connection Host/current origin (never forwarded-host), current Java OPERATOR session and timing-safe current CSRF token. Unknown browser identity/tool/result/URL fields are rejected. It generates its own request/run IDs, pseudonymizes the verified username with a BFF-only HMAC key, and signs exact body/route/context using an independent Ed25519 private key. Python receives only its public key; no Java secret, cookie, CSRF token or username is forwarded.
+Policy questions choose an actual active Java profile/version. POST
+`/api/ops/ai/ask` accepts only that reference, question and en/ja language. The BFF
+checks current OPERATOR/CSRF/same origin, derives the synthetic supplier scope,
+signs the exact bounded body, then rechecks the session and immutable active
+profile before releasing evidence. Browser authority, provider URLs and arbitrary
+collection IDs are rejected. A source button POSTs the profile reference and chunk
+ID to `/api/ops/ai/citations/read`. Every click rechecks Java and Python current
+document grants, active snapshot and effective version. Missing and revoked
+sources share the same public 404. No browser link follows a model-generated URL.
+Text is rendered as escaped React text; source dialogs restore keyboard focus.
 
-Required server-only configuration is listed in `.env.example`: fixed Java/AI origins, existing Java BFF/ops credentials, AI signing key ID and base64 DER PKCS8 private key, and an independent >=32-byte actor HMAC key. `AI_COLLECTION_IDS_JSON` may narrow the fixed two public synthetic collection IDs. This is a shared synthetic store for all OPERATORs, not tenant isolation. Key rotation changes pseudonyms and invalidates old transport contexts. Keys are not generated or installed by the route.
+Investigation questions start a durable run before a bounded read-only resume.
+Live resume replies include projected observations actually read during that
+request, after authorization and successful checkpointing. Inspect returns only
+historical status/count/time summaries. It never replays cached Java or document
+bodies. A terminal turn can be followed by another independent question; at most
+five historical turn summaries stay in component memory, without model memory
+across runs. The page distinguishes investigation completion from Java job status.
+Human business changes link to the existing current-profile/preview/confirm flow.
+No AI control confirms an import, activates a profile or restarts a job.
 
-The live request owns result history, call IDs, deadline and tool budget. Limits: 25 seconds including authentication, at most four Python step calls/three tool executions, 65,536 request/step bytes, 16,384 projected tool-result bytes. Current process rate limit is eight accepted requests per pseudonymous actor/minute, with at most 1024 rate windows. It caches no sessions/results and is not a distributed rate limiter. Browser cancellation aborts fetch/stream work; no later privileged step continues. Reads already received by Java cannot be retroactively cancelled or revoked.
+Only a run UUID is retained in tab session storage. Questions, excerpts and results
+are not written there. The BFF owner check still governs a restored or pasted UUID.
+After reload, a stopped request or unknown outcome, inspect explicitly. No polling,
+retry, automatic resume on reload or hidden background execution was added. A new
+question explicitly resumes only the run just saved by that same user gesture.
+Stopping a browser wait does not assert server cancellation; explicit cancel uses
+the latest inspected revision. Forgetting a reference does not cancel the run.
 
-Before every tool and final response, the BFF checks the current Java session again with the same request-local cookie jar. A different account/expired/disabled/revoked operator stops the loop. Legitimate VMARKET_SESSION refresh/deletion is propagated only to the same browser response. Each Java GET independently reauthorizes. No model envelope is accepted as a new callback/execution request.
+Current-session refresh, expiry, lost authority and account changes clear privileged
+results. An identity-keyed component boundary clears local conversations when the
+account changes. Source/current-profile changes can still invalidate a historical
+answer; reopening always requires current access. This is a shared synthetic demo
+with the two documented supplier collections, not a production tenant model.
 
-Closed tools:
-
-- get_integration_profiles -> GET /api/ops/integration-profiles, verifies exact three-target Java policy and strips audit identities.
-- get_imports -> GET /api/ops/imports, at most 20, omits filename/account data.
-- inspect_import_job -> GET /api/ops/imports/{canonical UUID}/inspection; rowNumber/reason is converted to bounded row-number/code pairs, no raw errors/recovery details.
-- get_reconciliation_report -> GET /api/ops/reconciliations, latest 20 only, filter exact job ID and choose newest stored report. No invented by-ID GET or reconciliation POST.
-- search_supplier_knowledge -> separately signed Python POST /ai/knowledge/search, only a subset of current signed scopes. Excerpts/IDs are data, not links/executable markup.
-
-Tool names/arguments/IDs, response identity/step, per-result bytes and call uniqueness are checked. Final UI summary is rebuilt from validated observation statuses; unsupported Python business-success prose is discarded. The response contains bounded structured observations with timestamps, not proof of freshness or business approval. Failed/truncated tools remain explicit. No retries, arbitrary fetch, SQL, headers, preview, confirm, restart, profile mutation or stock/checkout write can be selected by an intent.
-
-Tests follow the incremental red/green workflow and use a typed Spec/Handler Result interface. Run `npm run verify` and `npm run build:worker` (bundle only, no deploy). The paired AI_Applied P09 evidence contains disposable real Java/Next/Python auth/read checks, unchanged business-table snapshots, separate local-model/mock-tool smoke and known limitations. Java source/tests stay unchanged; its 115-test baseline remains verified. Existing dependency audit has 19 advisories (17 moderate/two high), tracked separately for P14.
+Validation: `npm run verify`, `npm run build:worker`, and
+`BASE_URL=... QA_ARTIFACT_DIR=... npm run test:e2e:copilot` against a local server
+with the panel/QA/runs flags enabled. The browser script explicitly mocks HTTP and
+does not establish model quality or actual Java integration. The AI_Applied repo
+contains separately labelled local-model and optional disposable integration tools.
+Real customer UAT, full assistive-technology coverage and production deployment
+remain pending. See AI_Applied `docs/evidence/P12.md` for current executed evidence.

@@ -16,7 +16,10 @@ Input is a strict union:
 
 Start persists a fresh conversation/run before model/tool dispatch. Preserve the
 returned reference; resume is a separate current-authorized request. Successful
-responses contain only `{run: RunState}` and request correlation header. Current
+responses contain `{run: RunState, observations: Observation[]}` and a request
+correlation header. P12 adds transient, projected results only for reads executed
+by the current resume request; start/inspect/cancel return an empty observations
+array. Stored run summaries are unchanged and do not replay cached bodies. Current
 OPERATOR/CSRF, same origin, owner HMAC and current scopes apply to every command.
 Each read dispatch and public response rechecks session, and Java independently
 authorizes its fixed GET. The BFF alone can send signed plan/claim/record/recover

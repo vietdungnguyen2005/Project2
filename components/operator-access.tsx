@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { Fragment,useEffect, useRef,useState, type FormEvent, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { getOperatorSession, type OperatorSession } from "@/lib/operator-session";
 
@@ -9,19 +9,28 @@ export function OperatorAccess({ children }: { children: ReactNode }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const queryClient = useQueryClient();
+  const identity=useRef<string|null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
+    let generation=0;
     const refresh = () => {
-      void getOperatorSession(controller.signal).then(setSession).catch((cause: unknown) => {
-        if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "Session unavailable.");
+      const currentGeneration=++generation;
+      void getOperatorSession(controller.signal).then(current=>{
+        if(controller.signal.aborted||currentGeneration!==generation)return;
+        if(!current.authenticated||!current.roles.includes("ROLE_OPERATOR")||(identity.current!==null&&identity.current!==current.username))queryClient.clear();
+        identity.current=current.authenticated?current.username:null;
+        setSession(current);
+      }).catch((cause: unknown) => {
+        if (!controller.signal.aborted&&currentGeneration===generation) {queryClient.clear();setSession(null);identity.current=null;setError(cause instanceof Error ? cause.message : "Session unavailable.");}
       });
     };
     refresh();
     const timer = window.setInterval(refresh, 60_000);
     window.addEventListener("focus", refresh);
-    return () => { controller.abort(); window.clearInterval(timer); window.removeEventListener("focus", refresh); };
-  }, []);
+    window.addEventListener("vmarket-session-check", refresh);
+    return () => { controller.abort(); window.clearInterval(timer); window.removeEventListener("focus", refresh);window.removeEventListener("vmarket-session-check",refresh); };
+  }, [queryClient]);
 
   async function login(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -59,7 +68,7 @@ export function OperatorAccess({ children }: { children: ReactNode }) {
         <button type="button" disabled={busy} onClick={() => void logout()} className="rounded border border-white/40 px-4 py-2 disabled:opacity-50">Sign out</button>
         {error && <p role="alert" className="w-full text-rose-300">{error}</p>}
       </div>
-      {children}
+      <Fragment key={session.username}>{children}</Fragment>
     </>;
   }
   return <main className="grid min-h-screen place-items-center bg-slate-950 px-5 py-12 text-slate-100">

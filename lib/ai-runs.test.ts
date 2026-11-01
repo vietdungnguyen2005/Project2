@@ -53,6 +53,18 @@ it("resumes a stored revision with fresh auth and checkpoints one fixed read exa
   expect(JSON.stringify(data)).not.toContain("lease_id");
 });
 
+it("returns actual read results only on the live resume response and never replays them on inspection",async()=>{
+  const {seen}=setup();const created=await(await handleRun(request({action:"start",question:"List imports"}))).json();
+  expect(created.observations).toEqual([]);
+  const resumed=await(await handleRun(request({action:"resume",run_id:created.run.run_id,expected_revision:0}))).json();
+  expect(resumed.observations).toHaveLength(1);
+  expect(resumed.observations[0]).toMatchObject({tool_name:"get_imports",status:"ok",data:{imports:[]}});
+  const inspected=await(await handleRun(request({action:"inspect",run_id:created.run.run_id}))).json();
+  expect(inspected.observations).toEqual([]);
+  expect(inspected.run.observations).toHaveLength(1);
+  expect(seen.filter(s=>s.url.endsWith("/api/ops/imports"))).toHaveLength(1);
+});
+
 it("rejects a stale duplicate resume without repeating the read",async()=>{
   const {seen}=setup();const created=await(await handleRun(request({action:"start",question:"List imports"}))).json();
   expect((await handleRun(request({action:"resume",run_id:created.run.run_id,expected_revision:0}))).status).toBe(200);

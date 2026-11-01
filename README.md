@@ -183,3 +183,7 @@ Data-access/transaction failures return sanitized backend 503 `DATABASE_UNAVAILA
 These limits protect different waits, not an additive latency SLA or a promise that Java always finishes before the BFF. Spring timeout is applied through JDBC statements; network cancellation/commit acknowledgement can take longer. Driver/pool settings affect all datasource users, including imports and Flyway, so long maintenance work needs explicit review/overrides. Connection URL/deployment overrides can change effective settings. This phase does not prove packet-loss recovery, cover every servlet/auth/Redis/OTLP wait, or replace ingress/concurrency limits.
 
 The current Cloudflare deployment points to the live Render backend through a server-only `BACKEND_ORIGIN`; provider secret stores hold the BFF and operations credentials.
+
+## Optional read-only AI copilot gateway
+
+P09 adds a feature-OFF [request-bound OPERATOR gateway](docs/ai-copilot.md). No write/import/checkout semantics or production deployment changed.

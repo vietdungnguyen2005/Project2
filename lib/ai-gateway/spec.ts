@@ -20,7 +20,7 @@ export const ToolIntent = z.discriminatedUnion("tool_name", [
 export type Intent = z.infer<typeof ToolIntent>;
 export const FailureCode = z.enum(["AI_DISABLED", "INPUT_INVALID", "ACCESS_DENIED", "SESSION_EXPIRED",
   "CONFIGURATION_UNAVAILABLE", "OUTPUT_INVALID", "DEPENDENCY_UNAVAILABLE", "DEADLINE_EXCEEDED",
-  "BUDGET_EXCEEDED", "STEP_CONFLICT"]);
+  "BUDGET_EXCEEDED", "STEP_CONFLICT", "RUN_NOT_AVAILABLE"]);
 export type GatewayFailure = z.infer<typeof FailureCode>;
 export type Result<T> = { success: true; data: T } | { success: false; code: GatewayFailure; status: number };
 export interface AgentGatewaySpec { execute(request: Request): Promise<Result<unknown>> }

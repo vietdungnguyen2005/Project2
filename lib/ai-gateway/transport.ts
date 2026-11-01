@@ -3,7 +3,7 @@ import { createHash, createPrivateKey, randomUUID, sign } from "node:crypto";
 export type TransportContext = { actor_ref: string; request_id: string; run_id: string; step: number;
   collection_ids: string[]; deadline_at: string };
 
-export function signedRequest(context: TransportContext, path: "/ai/agent/step" | "/ai/knowledge/search" | "/ai/mapping/suggest", payload: unknown): { body: string; headers: Headers } {
+export function signedRequest(context: TransportContext, path: "/ai/agent/step" | "/ai/knowledge/search" | "/ai/mapping/suggest" | "/ai/runs/control", payload: unknown): { body: string; headers: Headers } {
   const body = JSON.stringify(payload);
   if (Buffer.byteLength(body, "utf8") > (path==="/ai/mapping/suggest"?6_700_000:65_536)) throw new Error("INPUT_INVALID");
   const issued = Math.floor(Date.now()/1000);
@@ -15,7 +15,7 @@ export function signedRequest(context: TransportContext, path: "/ai/agent/step" 
   if (!/^[A-Za-z0-9_-]{1,32}$/.test(kid)) throw new Error("CONFIGURATION_UNAVAILABLE");
   const encoded = Buffer.from(JSON.stringify({ version: 1, issuer: "vmarket-bff", audience: "vmarket-ai",
     mode: "integrated", kid, ...context, nonce: randomUUID(), issued_at: issued, expires_at: expires,
-    operation: path === "/ai/agent/step" ? "agent_step" : path === "/ai/mapping/suggest" ? "mapping_suggest" : "knowledge_search", request_digest: requestDigest,
+    operation: path === "/ai/agent/step" ? "agent_step" : path === "/ai/mapping/suggest" ? "mapping_suggest" : path === "/ai/runs/control" ? "run_control" : "knowledge_search", request_digest: requestDigest,
   })).toString("base64url");
   const key = createPrivateKey({ key: Buffer.from(process.env.AI_SIGNING_KEY_PKCS8_BASE64 ?? "", "base64"),
     type: "pkcs8", format: "der" });

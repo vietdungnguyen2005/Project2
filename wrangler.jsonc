@@ -8,7 +8,7 @@
   "vars": {
     "AI_COPILOT_ENABLED": "true",
     "AI_QA_ENABLED": "true",
-    "AI_COPILOT_PANEL_ENABLED": "false",
+    "AI_COPILOT_PANEL_ENABLED": "true",
     "AI_RUNS_ENABLED": "false",
     "AI_MAPPING_DRAFTS_ENABLED": "false",
     "AI_SERVICE_ORIGIN": "https://vmarket-ai-applied.vmarket-vietdung2005.workers.dev",

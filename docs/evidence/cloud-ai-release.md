@@ -11,7 +11,8 @@ requests bind the actor, supplier collection, body, deadline and nonce. The BFF
 still validates Java operator sessions and the current active profile before
 and after each call. AI cannot approve imports or change business records.
 
-Agent panel, durable runs and AI mapping drafts remain disabled for this initial
+The Copilot panel is visible for policy QA. Import investigation, durable runs
+and AI mapping drafts remain disabled for this initial
 edge release. Their local Python implementation has not been ported to Workers.
 The cloud adapter uses a bounded full-context synthetic corpus and Workers AI
 Qwen3 30B A3B; it is a separate profile from the local E5/Ollama evaluation.

@@ -51,7 +51,7 @@ export class JavaSession {
     headers.set("X-V-Market-BFF-Secret", process.env.BFF_SHARED_SECRET ?? "");
     if (path.startsWith("/api/ops/")) headers.set("X-V-Market-Ops-Secret", process.env.VMARKET_OPS_SECRET ?? "");
     const response = await fetch(origin + path, { method: "GET", headers, signal: this.signal,
-      cache: "no-store", redirect: "error" });
+      cache: "no-store", redirect: "manual" });
     if (response.status === 401 || response.status === 403) this.authorizationStatus = response.status;
     for (const item of response.headers.getSetCookie()) {
       const part = item.split(";")[0];

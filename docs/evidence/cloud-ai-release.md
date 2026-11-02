@@ -20,11 +20,16 @@ Secrets are injected into Cloudflare's secret store. The AI Worker has only the
 public verification key. Existing BACKEND_ORIGIN, BFF_SHARED_SECRET and
 VMARKET_OPS_SECRET bindings are retained. Never copy `.env` into the release.
 
-Validation before publication: 124 frontend tests, TypeScript, ESLint and OpenNext
+Validation before publication: 125 frontend tests, TypeScript, ESLint and OpenNext
 Worker build pass. Direct live AI probe: health/readiness 200, unsigned request
 401, valid signed QA 200 with exact source quote, nonce replay 409, citation read
 200. Authenticated end-to-end validation still requires an existing operator
 session; deployment checks must not invent a production user or broaden roles.
+
+A native workerd check found that Workers rejects `redirect: "error"`. The
+policy transport and shared Java session reader use `manual` and reject non-OK
+responses, preserving the no-follow policy. A regression test covers this
+platform behavior; Node-only fetch mocks previously hid it.
 
 Rollback: restore the previous `v-market` Worker version using the predeployment
 version recorded in the private deployment inventory. The new D1 database is

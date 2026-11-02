@@ -28,6 +28,16 @@ function setup(){
 }
 afterEach(()=>{vi.unstubAllEnvs();vi.unstubAllGlobals();});
 
+it("runs on Workers fetch without using unsupported redirect:error",async()=>{
+  const {seen}=setup(),original=global.fetch;
+  vi.stubGlobal("fetch",async(url:string,init:RequestInit)=>{
+    if(init.redirect==="error")throw new TypeError("Workers only supports follow or manual");
+    return original(url,init);
+  });
+  expect((await handleQA(request(),"ask")).status).toBe(200);
+  expect(seen.every(s=>s.init.redirect==="manual")).toBe(true);
+});
+
 it("derives the QA scope from a current Java profile and rechecks authority before returning signed evidence",async()=>{
   const {seen}=setup();
   const response=await handleQA(request(),"ask");

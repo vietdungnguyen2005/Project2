@@ -54,7 +54,7 @@ export class PolicyGatewayHandler implements AgentGatewaySpec {
       const payload="question" in input?{question:input.question,language:input.language,collection_ids:[scope]}:{chunk_id:input.chunk_id,collection_ids:[scope]};
       const signed=signedRequest({actor_ref:actor,request_id:this.requestId,run_id:randomUUID(),step:0,collection_ids:[scope],deadline_at:new Date(deadline).toISOString()},path,payload);
       signal.throwIfAborted();
-      const response=await fetch(origin+path,{method:"POST",...signed,signal,redirect:"error",cache:"no-store"});
+      const response=await fetch(origin+path,{method:"POST",...signed,signal,redirect:"manual",cache:"no-store"});
       if(!response.ok){void response.body?.cancel();const codes:Partial<Record<number,GatewayFailure>>={400:"INPUT_INVALID",401:"ACCESS_DENIED",403:"ACCESS_DENIED",404:"DOCUMENT_NOT_AVAILABLE",409:"STEP_CONFLICT",413:"INPUT_INVALID",429:"BUDGET_EXCEEDED",502:"OUTPUT_INVALID",504:"DEADLINE_EXCEEDED"};return fail(codes[response.status]??"DEPENDENCY_UNAVAILABLE",codes[response.status]?response.status:503);}
       let result;
       try{const raw=JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(await readBounded(response,65536,signal)));

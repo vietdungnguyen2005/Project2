@@ -46,7 +46,7 @@ export class RunHandler implements AgentGatewaySpec {
       const control=async(payload:Record<string,unknown>,step=0):Promise<Snapshot>=>{
         signal.throwIfAborted();context.step=step;
         const signed=signedRequest(context,"/ai/runs/control",payload);
-        const response=await fetch(origin+"/ai/runs/control",{method:"POST",...signed,signal,redirect:"error",cache:"no-store"});
+        const response=await fetch(origin+"/ai/runs/control",{method:"POST",...signed,signal,redirect:"manual",cache:"no-store"});
         if(!response.ok){void response.body?.cancel();const codes:Partial<Record<number,GatewayFailure>>={400:"INPUT_INVALID",401:"ACCESS_DENIED",403:"ACCESS_DENIED",404:"RUN_NOT_AVAILABLE",409:"STEP_CONFLICT",413:"INPUT_INVALID",429:"BUDGET_EXCEEDED",502:"OUTPUT_INVALID",504:"DEADLINE_EXCEEDED"};throw new TransportFailure(codes[response.status]??"DEPENDENCY_UNAVAILABLE",codes[response.status]?response.status:503);}
         const parsed=RunSnapshot.safeParse(JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(await readBounded(response,16384,signal))));
         if(!parsed.success||parsed.data.state.run_id!==context.run_id||parsed.data.collection_ids.some(s=>!scopes.includes(s)))throw new TransportFailure("OUTPUT_INVALID",502);
@@ -93,7 +93,7 @@ export class RunHandler implements AgentGatewaySpec {
               if(intent.tool_name==="search_supplier_knowledge"){
                 context.step=snapshot.state.step;
                 const signed=signedRequest(context,"/ai/knowledge/search",intent.arguments);
-                const response=await fetch(origin+"/ai/knowledge/search",{method:"POST",...signed,signal,cache:"no-store",redirect:"error"});
+                const response=await fetch(origin+"/ai/knowledge/search",{method:"POST",...signed,signal,cache:"no-store",redirect:"manual"});
                 if(!response.ok){void response.body?.cancel();throw new TransportFailure(response.status===401||response.status===403?"ACCESS_DENIED":"DEPENDENCY_UNAVAILABLE",response.status===401||response.status===403?response.status:503);}
                 const result=KnowledgeData.safeParse(JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(await readBounded(response,16384,signal))));
                 if(!result.success)throw new TransportFailure("OUTPUT_INVALID",502);

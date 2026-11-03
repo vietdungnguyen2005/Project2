@@ -3,6 +3,17 @@ import { handleRun } from "./ai-runs/handler";
 import { RunInput,type Snapshot } from "./ai-runs/spec";
 import { generateKeyPairSync,verify } from "node:crypto";
 
+it("supports Workers redirect handling for durable control requests",async()=>{
+  setup();const original=global.fetch;
+  vi.stubGlobal("fetch",async(url:string,init:RequestInit)=>{
+    if(init.redirect==="error")throw new TypeError("unsupported edge redirect mode");
+    return original(url,init);
+  });
+  const response=await handleRun(new Request("http://localhost/api/ops/ai/runs",{method:"POST",headers:{Origin:"http://localhost",
+    "Content-Type":"application/json","X-CSRF-TOKEN":"current"},body:JSON.stringify({action:"start",question:"List imports"})}));
+  expect(response.status).toBe(200);
+});
+
 function setup(){
   const key=generateKeyPairSync("ed25519"),actor=crypto.randomUUID();
   for(const [k,v] of Object.entries({AI_COPILOT_ENABLED:"true",AI_RUNS_ENABLED:"true",BACKEND_ORIGIN:"http://java",AI_SERVICE_ORIGIN:"http://ai",AI_SIGNING_KID:"test",AI_ACTOR_HMAC_KEY:"r".repeat(64),AI_SIGNING_KEY_PKCS8_BASE64:key.privateKey.export({format:"der",type:"pkcs8"}).toString("base64")}))vi.stubEnv(k,v);

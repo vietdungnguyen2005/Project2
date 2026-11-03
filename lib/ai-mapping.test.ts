@@ -8,6 +8,13 @@ const profile={profileId:"supplier-b",version:7,encoding:"UTF-8",vendorCode:"RIV
   skuNormalization:"TRIM",requiredFields:["sku","name","on_hand"],validation:{sku:{type:"string",minLength:1,maxLength:64},
   name:{type:"string",minLength:1,maxLength:160},on_hand:{type:"integer",min:0,max:1000000}},normalization:{sku:"TRIM",name:"TRIM",on_hand:"TRIM_INTEGER"}};
 const input={raw_base64:Buffer.from("SKU,ProductName,AvailableQuantity\nVM-002,Desk,60\n").toString("base64"),declared_encoding:"UTF-8",source_profile_id:"supplier-b",source_profile_version:7,method:"rule",synthetic:true};
+it("supports Workers fetch for signed mapping reads",async()=>{
+  setup();const original=global.fetch;
+  vi.stubGlobal("fetch",async(url:string,init:RequestInit)=>{
+    if(init.redirect==="error")throw new TypeError("unsupported edge redirect mode");return original(url,init);
+  });
+  expect((await handleMapping(request())).status).toBe(200);
+});
 function request(){return new Request("http://localhost/api/ops/ai/mapping/suggest",{method:"POST",headers:{Origin:"http://localhost","Content-Type":"application/json","X-CSRF-TOKEN":"current",Cookie:"VMARKET_SESSION=session"},body:JSON.stringify(input)});}
 
 function setup(){

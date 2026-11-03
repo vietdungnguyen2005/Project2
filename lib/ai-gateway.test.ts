@@ -236,6 +236,14 @@ async function scenario(reply: (body: { request_id: string; run_id: string; step
     headers:{Origin:"http://localhost:3000","X-CSRF-TOKEN":"current"},body:JSON.stringify({question:"List imports"})}));
   return {response,fetchMock};
 }
+it("uses Workers-supported manual redirects for agent requests",async()=>{
+  const {response}=await scenario((body,init)=>{
+    if(init.redirect!=="manual")throw new TypeError("Workers requires manual redirect handling");
+    return {protocol_version:1,request_id:body.request_id,run_id:body.run_id,step:body.step,kind:"final",
+      message:"No supported observation",citations:[],status:"abstained",handoff_reason:null};
+  });
+  expect(response.status).toBe(200);
+});
 
 it("refuses a claimed answered result with no tool observations",async()=>{
   const {response}=await scenario(body=>({protocol_version:1,request_id:body.request_id,run_id:body.run_id,step:body.step,

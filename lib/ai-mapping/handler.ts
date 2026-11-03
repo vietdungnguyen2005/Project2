@@ -53,7 +53,7 @@ export class MappingGatewayHandler implements AgentGatewaySpec {
         input:{raw_base64:input.raw_base64,declared_encoding:input.declared_encoding,selected_vendor_code:profile.vendor_code,profile_ids:[profile.profile_id],method:input.method,synthetic:true},profile_candidates:[candidate],
       });
       signal.throwIfAborted();
-      const response=await fetch(origin+"/ai/mapping/suggest",{method:"POST",...signed,signal,redirect:"error",cache:"no-store"});
+      const response=await fetch(origin+"/ai/mapping/suggest",{method:"POST",...signed,signal,redirect:"manual",cache:"no-store"});
       if(!response.ok){void response.body?.cancel();const status=[400,401,403,409,413,429,504].includes(response.status)?response.status:503;return fail(status===504?"DEADLINE_EXCEEDED":status===401||status===403?"ACCESS_DENIED":status===409?"STEP_CONFLICT":status===400||status===413?"INPUT_INVALID":"DEPENDENCY_UNAVAILABLE",status);}
       const result=MappingOutput.safeParse(JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(await readBounded(response,65536,signal))));
       if(!result.success)return fail("OUTPUT_INVALID",502);

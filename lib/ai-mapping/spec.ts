@@ -20,7 +20,7 @@ export const MappingDraft=z.strictObject({request_id:uuid,raw_sha256:z.string().
   unmapped_headers:z.array(Header).max(100),missing_required_fields:z.array(Target).max(3),
   warnings:z.array(z.enum(["AMBIGUOUS_HEADER","UNMAPPED_HEADER","FRESHNESS_UNVERIFIED","VENDOR_NOT_VERIFIED","ENCODING_DECLARED","SOURCE_UNTRUSTED","RULE_BASELINE","MODEL_UNAVAILABLE","MODEL_OUTPUT_INVALID","BUSINESS_VALIDATION_REQUIRED","PROFILE_MISMATCH","SAMPLE_TRUNCATED","ROW_REVIEW_REQUIRED","NO_AUTHORIZED_SOP"])).max(14),
   reason:z.string().min(1).max(500),profile_differences:z.array(z.strictObject({profile_id:z.string().max(48),version:z.number().int().min(1),active:z.boolean(),encoding_matches:z.boolean(),
-    changes:z.partialRecord(Target,z.tuple([Header,Header.nullable()]))})).length(1),requires_human_acceptance:z.literal(true),provider_mode:z.enum(["fake","local"]),
+    changes:z.partialRecord(Target,z.tuple([Header,Header.nullable()]))})).length(1),requires_human_acceptance:z.literal(true),provider_mode:z.enum(["fake","local","live"]),
 }).refine(d=>{
   const fields=d.assignments.map(a=>a.target_field),headers=d.assignments.map(a=>a.source_header);
   return new Set(fields).size===fields.length&&new Set(headers).size===headers.length&&

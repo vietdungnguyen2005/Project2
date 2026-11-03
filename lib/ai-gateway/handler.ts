@@ -69,7 +69,7 @@ export class AgentGatewayHandler implements AgentGatewaySpec {
         const payload = { protocol_version: 1, request_id: context.request_id, run_id: context.run_id, step,
           question: input.question, collection_ids: scopes, tool_result: history.at(-1) ?? null, previous_results: history.slice(0,-1) };
         const signed = signedRequest(context, "/ai/agent/step", payload);
-        const response = await fetch(origin+"/ai/agent/step", { method: "POST", ...signed, cache: "no-store", redirect: "error", signal });
+        const response = await fetch(origin+"/ai/agent/step", { method: "POST", ...signed, cache: "no-store", redirect: "manual", signal });
         if (!response.ok) return transportFailure(response);
         const parsed = StepResponse.safeParse(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(await readBounded(response,65_536,signal))));
         if (!parsed.success) return fail("OUTPUT_INVALID", 502);
@@ -93,7 +93,7 @@ export class AgentGatewayHandler implements AgentGatewaySpec {
         if (next.intent.tool_name === "search_supplier_knowledge") {
           if (next.intent.arguments.collection_ids.some(s => !scopes.includes(s))) return fail("ACCESS_DENIED",403);
           const search = signedRequest(context,"/ai/knowledge/search",next.intent.arguments);
-          const response = await fetch(origin+"/ai/knowledge/search", { method: "POST", ...search, signal, cache: "no-store", redirect: "error" });
+          const response = await fetch(origin+"/ai/knowledge/search", { method: "POST", ...search, signal, cache: "no-store", redirect: "manual" });
           if (!response.ok) return transportFailure(response);
           const data = KnowledgeData.safeParse(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(await readBounded(response,16_384,signal))));
           if (!data.success) return fail("OUTPUT_INVALID",502);

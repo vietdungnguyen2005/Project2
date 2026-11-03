@@ -1,5 +1,10 @@
 # Cloud AI release — 2026-11-03
 
+Follow-up: [live signed-in mapping/profile/preview checks and agent task
+timings](live-ai-mapping-time.md), 2026-11-04. The owner authorized a dedicated
+operator account. The original pre-account validation below remains historical;
+the follow-up does not claim human onboarding time saved.
+
 The source checkout is a worktree of `D:/CV/Project_Frontend2`, on
 `codex/cloudflare-ai-release`, carrying the P09–P12 AI integration and P14
 dependency fixes from the other checkout of the same Project2 repository.

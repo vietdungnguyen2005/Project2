@@ -9,19 +9,20 @@ The public storefront is deployable to Cloudflare Workers. A Java 21/Spring Boot
 - Application: [v-market.vmarket-vietdung2005.workers.dev](https://v-market.vmarket-vietdung2005.workers.dev)
 - Backend readiness: [v-market-api.onrender.com/actuator/health/readiness](https://v-market-api.onrender.com/actuator/health/readiness)
 - Public deployment proof: [docs/evidence/live-deployment.md](docs/evidence/live-deployment.md)
+- Signed-in AI mapping/profile/preview and agent task timings: [live browser evidence](docs/evidence/live-ai-mapping-time.md). Human onboarding time savings are not established.
 - Short-lived AWS deployment proof: [docs/evidence/aws-deployment.md](docs/evidence/aws-deployment.md)
 
 The backend uses Render's free web-service tier, so the first request after 15 minutes without inbound traffic can take about a minute while the container wakes up.
 
 ## Demonstrated capabilities
 
-These describe the current locally verified source. The live demo/deployment evidence may still represent an earlier revision; this remediation has not been pushed or deployed yet.
+Deployment claims are scoped to the linked evidence. Live operator browser checks cover mapping review, profile creation/activation and Java preview; the wider local import/recovery tests have their own evidence and limits.
 
 - Durable guest checkout with server-owned JPY pricing, guest-capability-scoped idempotency, deterministic lock order and oversell protection (local remediation).
 - Random 256-bit tracking capabilities, hashed lookup and encrypted 24-hour replay copies; tracking responses exclude customer PII.
 - Audited, one-step fulfillment transitions in an operations console.
 - Strict UTF-8/CP932 CSV intake, bounded staging, quarantine, checksum deduplication, async dispatch and bounded abandoned-execution recovery with business/Batch metadata fencing (local remediation; see evidence for rollout status).
-- Versioned supplier contracts, read-only mapping preview and explicit confirmation in the existing ops ledger, with global original-byte dedup and stock/product-version guards. See the [synthetic supplier onboarding case](docs/fde/customer-problem.md), [acceptance evidence](docs/fde/acceptance-criteria.md), and [demo/handoff](docs/fde/customer-demo-script.md). This feature is local, not deployed.
+- Versioned supplier contracts, read-only mapping preview and explicit confirmation in the existing ops ledger, with global original-byte dedup and stock/product-version guards. [Live mapping/profile/preview checks](docs/evidence/live-ai-mapping-time.md) cover the deployed read-only preview endpoint; confirmation/recovery proofs remain scoped to the [local acceptance evidence](docs/fde/acceptance-criteria.md).
 - Redis metadata cache-aside with TTL, after-commit invalidation, fail-open fallback and metrics; stock/active eligibility read from PostgreSQL on every catalog request.
 - BFF trust boundary: browser requests never receive the backend or operations secrets.
 - Prometheus metrics, health probes, Micrometer tracing/OTLP support, and request correlation IDs.

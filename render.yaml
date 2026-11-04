@@ -2,7 +2,7 @@ services:
   - type: web
     name: v-market-api
     runtime: docker
-    repo: https://github.com/vietdungnguyen2005/Project2
+    repo: https://github.com/vietdungnguyen2005/v-market-commerce-platform
     branch: main
     rootDir: backend
     dockerfilePath: ./Dockerfile
